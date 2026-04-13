@@ -3,7 +3,8 @@
 A local web-based Wi-Fi diagnostic tool for macOS and Windows.  
 Scan nearby networks, analyse RF health, run site surveys, and export PDF reports — all from a browser tab.
 
-<img width="1490" height="614" alt="Screenshot 2026-04-13 at 11 19 19 AM" src="https://github.com/user-attachments/assets/2fe26520-dd24-4746-bf55-da39d04aa87a" />
+<img width="1490" height="614" alt="Screenshot 2026-04-13 at 11 19 19 AM" src="https://github.com/user-attachments/assets/6f16bc52-6a35-48b0-9582-daa70a712fe4" />
+
 
 
 ---
