@@ -263,6 +263,23 @@ def background_refresher():
         time.sleep(30)
 
 
+def wlanpi_prober():
+    """Probe WLANPi every 10 s via TCP port 22. Auto-scan when first detected."""
+    was_reachable = False
+    while True:
+        try:
+            now_reachable = wlanpi.probe()
+            if now_reachable and not was_reachable:
+                print("[WLANPi] Device connected — triggering auto-scan.")
+                threading.Thread(target=refresh_cache, daemon=True).start()
+            elif not now_reachable and was_reachable:
+                print("[WLANPi] Device disconnected.")
+            was_reachable = now_reachable
+        except Exception as e:
+            print(f"[WLANPi Probe] {e}")
+        time.sleep(10)
+
+
 # ---------------------------------------------------------------------------
 # Flask routes
 # ---------------------------------------------------------------------------
@@ -301,6 +318,7 @@ def api_rssi():
 def api_status():
     return jsonify({
         "available":  wlanpi.available,
+        "reachable":  wlanpi.reachable,
         "scan_iface": WLANPI_SCAN_IFACE,
         "status":     wlanpi.get_status() if wlanpi.available else {},
         "qbss":       wlanpi.get_qbss()   if wlanpi.available else [],
@@ -329,6 +347,7 @@ def main():
     print("WLANPi: not connected / unavailable" if not wlanpi.available else f"WLANPi OK [{WLANPI_SCAN_IFACE}]")
 
     threading.Thread(target=background_refresher, daemon=True).start()
+    threading.Thread(target=wlanpi_prober, daemon=True).start()
     app.run(host="0.0.0.0", debug=False, port=5001)
 
 

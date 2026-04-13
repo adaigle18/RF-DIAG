@@ -223,6 +223,12 @@
   /* ── Location Services badge ── */
   #loc-status { font-size: 10px; padding: 2px 8px; border: 1px solid; display: none; }
 
+  /* ── WLANPi connection badge ── */
+  #wlanpi-conn-status {
+    font-size: 10px; padding: 2px 8px; border: 1px solid; display: none;
+    transition: color 0.3s, border-color 0.3s;
+  }
+
   .pi-grid { display: flex; flex-wrap: wrap; gap: 8px; }
   .pi-ssid { font-size: 11px; padding: 4px 12px; border: 1px solid var(--border); color: var(--blue); background: #071a2e; }
 
@@ -456,6 +462,7 @@
     <span id="last-updated">-</span>
     <span id="scan-source" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);color:var(--text-mute);">-</span>
     <span id="loc-status"></span>
+    <span id="wlanpi-conn-status"></span>
     <button class="btn" onclick="exportCSV()" style="border-color:var(--text-mute);color:var(--text-mute);" title="Export table to CSV">&#8615; CSV</button>
     <button id="survey-toggle" class="btn" onclick="toggleSurvey()">&#9638; Survey</button>
     <button id="refresh-btn" class="btn" onclick="forceRefresh()">&#8635; Scan</button>
@@ -1106,6 +1113,36 @@ async function forceRefresh() {
 fetchData();
 setInterval(fetchData, 31000);
 
+// ── WLANPi auto-detect: poll /api/status every 10 s ──────────────────
+let _wlanpiWasReachable = false;
+
+async function pollWlanpiStatus() {
+  try {
+    const res  = await fetch('/api/status');
+    const data = await res.json();
+    const el   = document.getElementById('wlanpi-conn-status');
+    const reachable = data.reachable === true;
+
+    if (reachable) {
+      el.style.display      = '';
+      el.textContent        = 'WLANPi: CONNECTED';
+      el.style.color        = 'var(--green2)';
+      el.style.borderColor  = 'var(--green-dim)';
+    } else {
+      el.style.display = 'none';
+    }
+
+    // Auto-scan when WLANPi first detected
+    if (reachable && !_wlanpiWasReachable) {
+      console.log('[WLANPi] Device detected — auto-refreshing scan.');
+      await forceRefresh();
+    }
+    _wlanpiWasReachable = reachable;
+  } catch(e) { /* silent — server may be starting */ }
+}
+
+pollWlanpiStatus();
+setInterval(pollWlanpiStatus, 10000);
 
 // ═══════════════════════════════════════════════════════
 // CHANNEL OCCUPANCY CHART

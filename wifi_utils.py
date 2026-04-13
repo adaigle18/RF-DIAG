@@ -371,6 +371,7 @@ class WLANPiSSH:
         self._client = None
         self._lock = threading.Lock()
         self._available = False
+        self._reachable = False
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -414,6 +415,42 @@ class WLANPiSSH:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def probe(self) -> bool:
+        """
+        Fast reachability check: TCP connect to port 22, ~2 s timeout.
+        Does NOT perform an SSH handshake.  Updates _reachable and closes
+        any stale SSH client when the host goes away.
+        Returns True if the WLANPi is reachable.
+        """
+        import socket
+        reachable = False
+        try:
+            with socket.create_connection((self.host, 22), timeout=2):
+                reachable = True
+        except (OSError, socket.timeout):
+            pass
+
+        if reachable and not self._reachable:
+            log.info(f"[WLANPi] Device detected at {self.host}")
+        elif not reachable and self._reachable:
+            log.info(f"[WLANPi] Device no longer reachable at {self.host}")
+            with self._lock:
+                self._available = False
+                if self._client:
+                    try:
+                        self._client.close()
+                    except Exception:
+                        pass
+                    self._client = None
+
+        self._reachable = reachable
+        return reachable
+
+    @property
+    def reachable(self) -> bool:
+        """True if the last probe() found the WLANPi's SSH port open."""
+        return self._reachable
 
     def run(self, command: str) -> tuple[str, str]:
         """
