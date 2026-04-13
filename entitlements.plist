@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Not sandboxed (PyInstaller apps run outside App Sandbox) -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+
+    <!-- Flask web server listens on localhost:5001 -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+
+    <!-- Outbound connections: WLANPi SSH, CoreWLAN, browser open -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+</dict>
+</plist>

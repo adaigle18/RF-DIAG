@@ -1,0 +1,2012 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wi-Fi Diagnostic Tool</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0a0e0a;
+    --bg2:       #111611;
+    --bg3:       #181e18;
+    --border:    #1e2d1e;
+    --green:     #39ff7a;
+    --green2:    #1fcc57;
+    --green-dim: #1a7a3a;
+    --amber:     #f5a623;
+    --red:       #ff4545;
+    --blue:      #4db8ff;
+    --purple:    #b06fff;
+    --text:      #c8e6c8;
+    --text-dim:  #6b8f6b;
+    --text-mute: #3a5a3a;
+    --mono:      'IBM Plex Mono', monospace;
+    --sans:      'IBM Plex Sans', sans-serif;
+    --survey-w:  600px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    position: sticky; top: 0; z-index: 100;
+  }
+
+  .logo { display: flex; align-items: baseline; gap: 10px; }
+  .logo-mark { font-size: 18px; font-weight: 600; color: var(--green); letter-spacing: -0.5px; }
+  .logo-sub  { font-size: 11px; color: var(--text-dim); letter-spacing: 2px; text-transform: uppercase; }
+
+  .header-right { display: flex; align-items: center; gap: 12px; }
+
+  .status-dot {
+    display: inline-block; width: 7px; height: 7px;
+    border-radius: 50%; background: var(--green-dim);
+    animation: pulse 2s infinite;
+  }
+  .status-dot.active { background: var(--green); }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  #last-updated { font-size: 11px; color: var(--text-dim); }
+
+  .btn {
+    font-family: var(--mono); font-size: 11px; cursor: pointer;
+    border: 1px solid var(--green-dim); padding: 5px 14px;
+    letter-spacing: 1px; text-transform: uppercase; transition: all 0.15s;
+    background: transparent; color: var(--green);
+  }
+  .btn:hover    { background: var(--green-dim); color: #fff; }
+  .btn:disabled { opacity: 0.4; cursor: wait; }
+  .btn.active   { background: var(--green-dim); color: #fff; }
+
+  /* ── Survey toggle btn ── */
+  #survey-toggle {
+    border-color: var(--blue); color: var(--blue);
+  }
+  #survey-toggle:hover, #survey-toggle.active {
+    background: #071a2e; color: var(--blue); border-color: var(--blue);
+  }
+
+  /* ── WLANPi MBR banner ── */
+  #wlanpi-mbr-banner {
+    display: none; padding: 8px 28px;
+    background: var(--bg3); border-bottom: 1px solid var(--border);
+    font-size: 11px; color: var(--text-dim); gap: 16px; align-items: center;
+  }
+  #wlanpi-mbr-banner.visible { display: flex; }
+  #wlanpi-mbr-banner .mbr-active-val { color: var(--purple); font-weight: 600; font-size: 13px; }
+
+  /* ── Filter bar ── */
+  .filter-bar {
+    padding: 14px 28px; background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .filter-bar label { font-size: 11px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; }
+
+  #ssid-filter {
+    font-family: var(--mono); font-size: 12px; background: var(--bg3);
+    border: 1px solid var(--border); color: var(--text);
+    padding: 5px 12px; width: 220px; outline: none;
+  }
+  #ssid-filter:focus { border-color: var(--green-dim); }
+
+  .chip-group { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    font-family: var(--mono); font-size: 10px; padding: 3px 10px;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--text-dim); cursor: pointer; text-transform: uppercase;
+    letter-spacing: 1px; transition: all 0.1s;
+  }
+  .chip.active, .chip:hover { border-color: var(--green-dim); color: var(--green); }
+
+  /* ── Summary bar ── */
+  .summary-bar {
+    display: grid; grid-template-columns: repeat(4,1fr);
+    gap: 1px; background: var(--border); border-bottom: 1px solid var(--border);
+  }
+  .summary-cell { background: var(--bg2); padding: 12px 20px; display: flex; flex-direction: column; gap: 2px; }
+  .summary-cell .val { font-size: 22px; font-weight: 600; color: var(--green); line-height: 1; }
+  .summary-cell .lbl { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; }
+
+  /* ── Layout with survey panel ── */
+  .app-body {
+    display: flex;
+    transition: all 0.3s ease;
+  }
+
+  main {
+    flex: 1;
+    padding: 24px 28px;
+    display: flex; flex-direction: column; gap: 20px;
+    min-width: 0;
+    transition: all 0.3s ease;
+  }
+
+  /* survey panel is now a fixed overlay */
+
+  /* ── Section headings ── */
+  .section-head {
+    font-size: 10px; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 2px; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-head::after { content:''; flex:1; height:1px; background:var(--border); }
+
+  /* ── Network table ── */
+  .net-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .net-table th {
+    text-align: left; padding: 6px 10px; font-size: 10px;
+    color: var(--text-mute); text-transform: uppercase; letter-spacing: 1.5px;
+    border-bottom: 1px solid var(--border); font-weight: 500;
+  }
+  .net-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .net-table tr:hover td { background: var(--bg3); }
+
+  .rssi-bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .rssi-bar { height: 4px; border-radius: 2px; background: var(--border); width: 80px; overflow: hidden; flex-shrink: 0; }
+  .rssi-fill { height: 100%; border-radius: 2px; transition: width 0.4s; }
+
+  .badge {
+    display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 2px;
+    font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; white-space: nowrap;
+  }
+  .badge-good   { background: #0d2e18; color: var(--green);  border: 1px solid var(--green-dim); }
+  .badge-warn   { background: #2e1f00; color: var(--amber);  border: 1px solid #5a3d00; }
+  .badge-danger { background: #2e0808; color: var(--red);    border: 1px solid #5a1010; }
+  .badge-blue   { background: #071a2e; color: var(--blue);   border: 1px solid #0d3a5a; }
+  .badge-6ghz   { background: #1a0d2e; color: #d084ff;      border: 1px solid #6a0daa; }
+  .badge-purple { background: #1a0d2e; color: var(--purple); border: 1px solid #3d1a5a; }
+  .badge-dim    { background: var(--bg3); color: var(--text-dim); border: 1px solid var(--border); }
+
+  .mbr-mismatch-icon { color: var(--amber); font-size: 10px; margin-left: 4px; cursor: help; }
+  .pi-tag { font-size: 9px; color: var(--blue); margin-left: 5px; opacity: 0.8; }
+
+  .detail-row td { padding: 0 !important; border-bottom: none !important; }
+  .detail-panel { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; background: var(--bg3); border-bottom: 1px solid var(--border); }
+  .detail-panel.open { max-height: 800px; }
+
+  .detail-inner { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; background: var(--border); }
+  .detail-section { background: var(--bg3); padding: 16px 18px; }
+  .detail-section h4 { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; font-weight: 500; }
+  .detail-kv { display: flex; flex-direction: column; gap: 5px; }
+  .kv { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .kv .k { font-size: 10px; color: var(--text-mute); white-space: nowrap; }
+  .kv .v { font-size: 11px; font-weight: 500; text-align: right; }
+  .kv .v.good   { color: var(--green); }
+  .kv .v.warn   { color: var(--amber); }
+  .kv .v.danger { color: var(--red); }
+
+  .advice-box { font-size: 10px; line-height: 1.5; padding: 8px 10px; border-left: 2px solid var(--green-dim); color: var(--text-dim); background: var(--bg2); margin-top: 8px; }
+  .advice-box.warn   { border-color: #5a3d00; color: var(--amber); }
+  .advice-box.danger { border-color: #5a1010; color: var(--red); }
+
+  .mbr-compare { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+  .mbr-row { display: flex; align-items: center; justify-content: space-between; font-size: 11px; padding: 4px 8px; background: var(--bg2); border: 1px solid var(--border); }
+  .mbr-row .mbr-label { font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; }
+  .mbr-mismatch-box { font-size: 10px; padding: 6px 10px; border-left: 2px solid var(--amber); color: var(--amber); background: #1a1000; margin-top: 6px; line-height: 1.5; }
+
+  .thr-row { display: flex; justify-content: space-between; align-items: center; font-size: 10px; padding: 2px 0; }
+  .thr-row .thr-k { color: var(--text-mute); }
+
+  .empty { text-align: center; color: var(--text-mute); padding: 40px !important; font-size: 11px; }
+
+  .spinner { display: inline-block; width: 10px; height: 10px; border: 1px solid var(--green-dim); border-top-color: var(--green); border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Sortable column headers ── */
+  .net-table th.sortable { cursor: pointer; user-select: none; }
+  .net-table th.sortable:hover { color: var(--green); }
+  .sort-arrow { font-size: 8px; margin-left: 3px; opacity: 0.25; vertical-align: middle; }
+  .sort-arrow::after { content: '▼'; }
+  .net-table th.sort-asc  .sort-arrow { opacity: 1; color: var(--green); }
+  .net-table th.sort-asc  .sort-arrow::after { content: '▲'; }
+  .net-table th.sort-desc .sort-arrow { opacity: 1; color: var(--green); }
+  .net-table th.sort-desc .sort-arrow::after { content: '▼'; }
+
+  /* ── Location Services badge ── */
+  #loc-status { font-size: 10px; padding: 2px 8px; border: 1px solid; display: none; }
+
+  .pi-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pi-ssid { font-size: 11px; padding: 4px 12px; border: 1px solid var(--border); color: var(--blue); background: #071a2e; }
+
+  /* ═══════════════════════════════════════════════════════
+     SURVEY PANEL
+  ═══════════════════════════════════════════════════════ */
+  #survey-panel {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: 0;
+    overflow: hidden;
+    border-left: 1px solid var(--border);
+    background: var(--bg2);
+    display: flex;
+    flex-direction: column;
+    transition: width 0.3s ease;
+    flex-shrink: 0;
+    z-index: 200;
+    box-shadow: -4px 0 24px rgba(0,0,0,0.5);
+  }
+  #survey-panel.open { width: min(65vw, 900px); min-width: 480px; }
+  #survey-overlay {
+    display: none; position: fixed; inset: 0; z-index: 199;
+    background: rgba(0,0,0,0.35);
+  }
+  #survey-overlay.visible { display: block; }
+
+
+  .survey-inner {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: calc(100vh - 60px);
+  }
+
+  .survey-head {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .survey-head h3 { font-size: 11px; color: var(--blue); text-transform: uppercase; letter-spacing: 2px; font-weight: 500; }
+  #survey-close { font-size: 16px; color: var(--text-mute); cursor: pointer; background: none; border: none; padding: 0 4px; line-height: 1; }
+  #survey-close:hover { color: var(--text); }
+
+  .survey-controls {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 8px;
+    flex-shrink: 0;
+  }
+  .survey-ctrl-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .survey-lbl { font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; min-width: 50px; }
+
+  .ssid-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  #survey-ssid-select, #survey-ssid2-select {
+    font-family: var(--mono); font-size: 11px;
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text); padding: 4px 8px; flex: 1; outline: none;
+  }
+  #survey-ssid-select:focus  { border-color: var(--blue); }
+  #survey-ssid2-select:focus { border-color: var(--purple); }
+
+  /* Threshold slider */
+  .threshold-row { display: flex; align-items: center; gap: 8px; }
+  #threshold-slider { flex: 1; accent-color: var(--amber); cursor: pointer; }
+  #threshold-val { font-size: 11px; color: var(--amber); font-weight: 600; min-width: 52px; text-align: right; }
+
+  .survey-btn {
+    font-family: var(--mono); font-size: 10px; cursor: pointer;
+    border: 1px solid var(--border); padding: 4px 10px;
+    letter-spacing: 1px; text-transform: uppercase;
+    background: transparent; color: var(--text-dim); transition: all 0.1s;
+    white-space: nowrap;
+  }
+  .survey-btn:hover   { border-color: var(--green-dim); color: var(--green); }
+  .survey-btn.danger  { border-color: #5a1010; color: var(--red); }
+  .survey-btn.danger:hover { background: #2e0808; }
+  .survey-btn.export  { border-color: var(--blue); color: var(--blue); }
+  .survey-btn.export:hover { background: #071a2e; }
+  .survey-btn.pdf     { border-color: var(--purple); color: var(--purple); }
+  .survey-btn.pdf:hover { background: #1a0d2e; }
+
+  #plan-drop-zone {
+    margin: 0 18px 0;
+    border: 1px dashed var(--border); padding: 20px;
+    text-align: center; cursor: pointer; color: var(--text-mute);
+    font-size: 11px; transition: all 0.15s; flex-shrink: 0;
+  }
+  #plan-drop-zone:hover, #plan-drop-zone.drag-over { border-color: var(--blue); color: var(--blue); background: #071a2e22; }
+  #plan-drop-zone.has-plan { display: none; }
+
+  /* Live RSSI dual bar */
+  .survey-rssi-bar {
+    padding: 6px 18px;
+    display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0; flex-wrap: wrap; min-height: 36px;
+  }
+  .survey-rssi-label { font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; }
+  .rssi-live-block { display: flex; align-items: center; gap: 6px; }
+  .rssi-live-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .rssi-live-val { font-size: 15px; font-weight: 600; font-family: var(--mono); }
+  .rssi-live-name { font-size: 9px; color: var(--text-dim); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rssi-sep { color: var(--border); font-size: 14px; }
+
+  .survey-btn.calib   { border-color: var(--amber); color: var(--amber); }
+  .survey-btn.calib:hover { background: #1a1000; }
+  .survey-btn.calib.active { background: #2e1f00; }
+
+  .survey-btn.mode-btn.active { border-color: var(--green-dim); color: var(--green); background: #0d2e18; }
+
+  /* MBR legend */
+  .mbr-legend-bar {
+    flex: 1; height: 6px; border-radius: 3px;
+    background: linear-gradient(to right, #ff4545, #f5a623, #f5a623, #39ff7a);
+  }
+  .mbr-legend-labels {
+    display: flex; justify-content: space-between;
+    font-size: 9px; margin-top: 2px; color: var(--text-mute);
+  }
+
+  #calib-status {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 4px 0; border-top: 1px solid var(--border); margin-top: 2px;
+  }
+
+  #calib-canvas {
+    position: absolute; top:0; left:0; width:100%; height:100%;
+    pointer-events: none;
+  }
+
+  #calib-modal {
+    display: none; position: fixed; inset: 0; z-index: 999;
+    background: rgba(0,0,0,0.7); align-items: center; justify-content: center;
+  }
+  #calib-modal.open { display: flex; }
+
+  #survey-canvas-wrap {
+    flex: 1; position: relative; overflow: hidden;
+    background: #060a06; margin: 8px 18px;
+    border: 1px solid var(--border); cursor: crosshair;
+    min-height: 220px; height: 50vh; max-height: 600px;
+  }
+  #plan-img { position: absolute; top:0; left:0; width:100%; height:100%; object-fit:fill; pointer-events:none; }
+  #heatmap-canvas { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; opacity:0.6; }
+  #threshold-canvas { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
+  #points-canvas { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
+
+  .survey-placeholder {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    text-align:center; color:var(--text-mute); font-size:11px; line-height:1.8; pointer-events:none;
+  }
+
+  .survey-legend {
+    padding: 6px 18px 10px;
+    display: flex; align-items: center; gap: 6px;
+    flex-shrink: 0; border-top: 1px solid var(--border);
+  }
+  .survey-legend span { font-size: 9px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; }
+  .legend-bar { flex:1; height:6px; border-radius:3px; background: linear-gradient(to right,#ff4545,#f5a623,#39ff7a); }
+  .legend-label-left  { color: var(--red) !important; }
+  .legend-label-right { color: var(--green) !important; }
+
+  .survey-points-list { max-height: 120px; overflow-y: auto; margin: 0 18px 10px; border: 1px solid var(--border); flex-shrink: 0; }
+  .survey-point-row { display:flex; align-items:center; justify-content:space-between; padding:4px 10px; font-size:10px; border-bottom:1px solid var(--border); }
+  .survey-point-row:last-child { border-bottom: none; }
+  .survey-point-row .pt-rssi { font-weight: 600; }
+  .survey-point-row .pt-dot  { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .survey-point-row .pt-del  { cursor:pointer; color:var(--text-mute); font-size:12px; background:none; border:none; padding:0 2px; }
+  .survey-point-row .pt-del:hover { color: var(--red); }
+
+  /* PDF modal */
+  #pdf-modal {
+    display: none; position: fixed; inset: 0; z-index: 999;
+    background: rgba(0,0,0,0.7); align-items: center; justify-content: center;
+  }
+  #pdf-modal.open { display: flex; }
+  .pdf-modal-box {
+    background: var(--bg2); border: 1px solid var(--border);
+    padding: 28px 32px; width: 420px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .pdf-modal-box h3 { font-size: 12px; color: var(--purple); text-transform: uppercase; letter-spacing: 2px; }
+  .pdf-field { display: flex; flex-direction: column; gap: 4px; }
+  .pdf-field label { font-size: 10px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; }
+  .pdf-field input, .pdf-field textarea {
+    font-family: var(--mono); font-size: 12px;
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text); padding: 6px 10px; outline: none; resize: vertical;
+  }
+  .pdf-field input:focus, .pdf-field textarea:focus { border-color: var(--purple); }
+  .pdf-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+
+  /* ── Channel occupancy chart ── */
+  .ch-chart {
+    padding: 10px 28px 8px; background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .ch-band-row { display: flex; align-items: flex-end; gap: 4px; min-height: 36px; }
+  .ch-band-label { font-size: 9px; color: var(--text-mute); text-transform: uppercase;
+    letter-spacing: 1px; width: 34px; flex-shrink: 0; padding-bottom: 12px; line-height: 1.3; }
+  .ch-bar-wrap  { display: flex; align-items: flex-end; gap: 1px; flex-wrap: nowrap; }
+  .ch-bar { display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; }
+  .ch-bar-fill  { width: 14px; min-height: 2px; border-radius: 1px 1px 0 0; transition: height 0.3s; }
+  .ch-bar:hover .ch-bar-fill { filter: brightness(1.3); }
+  .ch-bar-lbl   { font-size: 7px; color: var(--text-mute); line-height: 1; }
+
+  /* ── Connected AP badge ── */
+  .badge-connected { background: #0a2e18; color: #39ff7a; border: 1px solid var(--green-dim);
+    font-size: 8px; padding: 1px 5px; border-radius: 2px; margin-left: 5px;
+    letter-spacing: 0.5px; text-transform: uppercase; vertical-align: middle; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg2); }
+  ::-webkit-scrollbar-thumb { background: var(--border); }
+</style>
+</head>
+<body>
+
+<div id="survey-overlay" onclick="toggleSurvey()"></div>
+<header>
+  <div class="logo">
+    <span class="logo-mark">&#11041; RF&middot;DIAG</span>
+    <span class="logo-sub">Wi-Fi Diagnostic</span>
+  </div>
+  <div class="header-right">
+    <span class="status-dot" id="status-dot"></span>
+    <span id="last-updated">-</span>
+    <span id="scan-source" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);color:var(--text-mute);">-</span>
+    <span id="loc-status"></span>
+    <button class="btn" onclick="exportCSV()" style="border-color:var(--text-mute);color:var(--text-mute);" title="Export table to CSV">&#8615; CSV</button>
+    <button id="survey-toggle" class="btn" onclick="toggleSurvey()">&#9638; Survey</button>
+    <button id="refresh-btn" class="btn" onclick="forceRefresh()">&#8635; Scan</button>
+  </div>
+</header>
+
+<!-- WLANPi active MBR banner -->
+<div id="wlanpi-mbr-banner">
+  <span style="color:var(--text-mute);font-size:10px;text-transform:uppercase;letter-spacing:1px;">WLANPi Active TX Rate</span>
+  <span class="mbr-active-val" id="banner-active-mbr">-</span>
+  <span style="font-size:10px;color:var(--text-mute);">from iw dev wlan0 link</span>
+</div>
+
+<div class="filter-bar">
+  <label>SSID</label>
+  <input id="ssid-filter" type="text" placeholder="filter..." oninput="renderTable()">
+  <label>Band</label>
+  <div class="chip-group">
+    <button class="chip active" data-band="all" onclick="setBand(this)">All</button>
+    <button class="chip" data-band="2.4" onclick="setBand(this)">2.4 GHz</button>
+    <button class="chip" data-band="5"   onclick="setBand(this)">5 GHz</button>
+    <button class="chip" data-band="6"   onclick="setBand(this)">6 GHz</button>
+  </div>
+  <label>Min MBR</label>
+  <div class="chip-group">
+    <button class="chip active" data-mbr="all" onclick="setMbr(this)">All</button>
+    <button class="chip" data-mbr="6"  onclick="setMbr(this)">>=6</button>
+    <button class="chip" data-mbr="12" onclick="setMbr(this)">>=12</button>
+    <button class="chip" data-mbr="24" onclick="setMbr(this)">>=24</button>
+  </div>
+</div>
+
+<div class="summary-bar">
+  <div class="summary-cell"><span class="val" id="s-total">-</span><span class="lbl">Networks</span></div>
+  <div class="summary-cell"><span class="val" id="s-24">-</span><span class="lbl">2.4 GHz</span></div>
+  <div class="summary-cell"><span class="val" id="s-6">-</span><span class="lbl">6 GHz</span></div>
+  <div class="summary-cell"><span class="val" id="s-mbr24">-</span><span class="lbl">MBR >= 24</span></div>
+</div>
+
+<!-- Channel occupancy chart -->
+<div class="ch-chart" id="ch-chart"></div>
+
+<div class="app-body">
+
+  <!-- Main content -->
+  <main>
+    <div>
+      <div class="section-head">Network analysis</div>
+      <table class="net-table">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="ssid"       onclick="setSort('ssid')">SSID<span class="sort-arrow"></span></th>
+            <th class="sortable" data-sort="bssid"      onclick="setSort('bssid')">BSSID<span class="sort-arrow"></span></th>
+            <th class="sortable" data-sort="channel"    onclick="setSort('channel')">Band / CH<span class="sort-arrow"></span></th>
+            <th class="sortable sort-desc" data-sort="rssi" onclick="setSort('rssi')">RSSI<span class="sort-arrow"></span></th>
+            <th class="sortable" data-sort="distance_m" onclick="setSort('distance_m')">Distance (Pwr: 20dBm)<span class="sort-arrow"></span></th>
+            <th>Band</th>
+            <th class="sortable" data-sort="mbr"        onclick="setSort('mbr')">MBR Supported<span class="sort-arrow"></span></th>
+            <th>TX Power</th>
+            <th class="sortable" data-sort="ch_util"    onclick="setSort('ch_util')">CH Util<span class="sort-arrow"></span></th>
+            <th class="sortable" data-sort="ccc"        onclick="setSort('ccc')">CCC<span class="sort-arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="net-tbody">
+          <tr><td colspan="10" class="empty">Scanning...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="wlanpi-section">
+      <div class="section-head">WLANPi visible SSIDs</div>
+      <div class="pi-grid" id="pi-grid"><span style="color:var(--text-mute);font-size:11px;">No WLANPi data</span></div>
+    </div>
+  </main>
+
+  <!-- ═══ SURVEY PANEL ═══ -->
+  <div id="survey-panel">
+    <div class="survey-inner">
+
+      <!-- Panel header -->
+      <div class="survey-head">
+        <h3>&#9638; Wi-Fi Survey</h3>
+        <button id="survey-close" onclick="toggleSurvey()">&#10005;</button>
+      </div>
+
+      <!-- Controls -->
+      <div class="survey-controls">
+        <!-- SSID 1 -->
+        <div class="survey-ctrl-row">
+          <span class="ssid-dot" id="dot1" style="background:#4db8ff;"></span>
+          <span class="survey-lbl">SSID 1</span>
+          <select id="survey-ssid-select"><option value="">-- select SSID --</option></select>
+        </div>
+        <!-- SSID 2 -->
+        <div class="survey-ctrl-row">
+          <span class="ssid-dot" id="dot2" style="background:#b06fff;"></span>
+          <span class="survey-lbl">SSID 2</span>
+          <select id="survey-ssid2-select"><option value="">-- none --</option></select>
+        </div>
+        <!-- Threshold -->
+        <div class="survey-ctrl-row threshold-row">
+          <span class="survey-lbl">Threshold</span>
+          <input type="range" id="threshold-slider" min="-90" max="-50" value="-70" step="1" oninput="updateThreshold()">
+          <span id="threshold-val">-70 dBm</span>
+        </div>
+        <!-- Heatmap mode + device mode -->
+        <div class="survey-ctrl-row">
+          <span class="survey-lbl">Map</span>
+          <button class="survey-btn mode-btn active" id="mode-rssi" onclick="setHeatmapMode('rssi')">RSSI</button>
+          <button class="survey-btn mode-btn" id="mode-mbr" onclick="setHeatmapMode('mbr')">MBR</button>
+          <span class="survey-lbl" style="margin-left:8px;">Device</span>
+          <button class="survey-btn mode-btn active" id="dev-laptop" onclick="setDeviceMode('laptop')">&#128187; Laptop</button>
+          <button class="survey-btn mode-btn" id="dev-phone" onclick="setDeviceMode('phone')">&#128241; Phone</button>
+        </div>
+        <!-- Buttons -->
+        <div class="survey-ctrl-row">
+          <button class="survey-btn" onclick="triggerPlanUpload()">&#8679; Load plan</button>
+          <button class="survey-btn calib" id="calib-btn" onclick="toggleCalibMode()">&#9141; Calibrate</button>
+          <button class="survey-btn" id="survey-refresh-btn" onclick="surveyRefresh()" title="Trigger fresh Wi-Fi scan">&#8635; Scan</button>
+          <button class="survey-btn danger" onclick="clearSurvey()">&#10006; Clear</button>
+          <button class="survey-btn export" onclick="exportJSON()">&#8615; JSON</button>
+          <button class="survey-btn pdf" onclick="openPdfModal()">&#9113; PDF</button>
+          <input type="file" id="plan-upload" accept="image/*" style="display:none" onchange="loadPlan(event)">
+        </div>
+        <!-- Image size warning -->
+        <div id="plan-size-warn" style="display:none;font-size:10px;line-height:1.5;padding:4px 2px;"></div>
+        <!-- Calibration status bar -->
+        <div id="calib-status" style="display:none;">
+          <span class="survey-lbl" style="color:var(--amber);">&#9141; CALIBRATION MODE</span>
+          <span id="calib-hint" style="font-size:10px;color:var(--text-dim);">Click point A on the plan</span>
+          <span id="calib-scale-display" style="font-size:10px;color:var(--green);margin-left:auto;"></span>
+        </div>
+      </div>
+
+      <!-- Live RSSI dual bar -->
+      <div class="survey-rssi-bar">
+        <span class="survey-rssi-label">Live</span>
+        <div class="rssi-live-block">
+          <span class="rssi-live-dot" style="background:#4db8ff;"></span>
+          <span class="rssi-live-val" id="live-rssi-val" style="color:var(--text-mute);">--</span>
+          <span class="rssi-live-name" id="live-ssid-name"></span>
+        </div>
+        <span class="rssi-sep" id="rssi-sep2" style="display:none;">|</span>
+        <div class="rssi-live-block" id="rssi-block2" style="display:none;">
+          <span class="rssi-live-dot" style="background:#b06fff;"></span>
+          <span class="rssi-live-val" id="live-rssi-val2" style="color:var(--text-mute);">--</span>
+          <span class="rssi-live-name" id="live-ssid-name2"></span>
+        </div>
+      </div>
+
+      <!-- Plan upload drop zone -->
+      <div id="plan-drop-zone"
+           onclick="triggerPlanUpload()"
+           ondragover="e=>{e.preventDefault();this.classList.add('drag-over')}"
+           ondragleave="e=>{this.classList.remove('drag-over')}"
+           ondrop="handleDrop(event)">
+        <div style="font-size:24px;margin-bottom:8px;">&#128247;</div>
+        <div>Drop floor plan here</div>
+        <div style="font-size:10px;margin-top:4px;color:var(--text-mute)">or click to browse (JPG / PNG)</div>
+      </div>
+
+      <!-- Canvas -->
+      <div id="survey-canvas-wrap" onclick="handleMapClick(event)">
+        <img id="plan-img" style="display:none">
+        <canvas id="heatmap-canvas"></canvas>
+        <canvas id="threshold-canvas"></canvas>
+        <canvas id="calib-canvas"></canvas>
+        <canvas id="points-canvas"></canvas>
+        <div class="survey-placeholder" id="survey-placeholder">
+          Load a floor plan above,<br>select a SSID, then<br>click to record RSSI points.
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div class="survey-legend" id="survey-legend">
+        <span class="legend-label-left" id="legend-left">-90</span>
+        <div class="legend-bar" id="legend-bar"></div>
+        <span class="legend-label-right" id="legend-right">-30 dBm</span>
+      </div>
+
+      <!-- Points list -->
+      <div class="survey-points-list" id="survey-points-list"></div>
+
+    </div>
+  </div><!-- /survey-panel -->
+
+</div><!-- /app-body -->
+
+<!-- PDF Modal -->
+<div id="pdf-modal">
+  <div class="pdf-modal-box">
+    <h3>&#9113; Export PDF Report</h3>
+    <div class="pdf-field">
+      <label>Report Title</label>
+      <input type="text" id="pdf-title" value="Wi-Fi Survey Report">
+    </div>
+    <div class="pdf-field">
+      <label>Site / Location</label>
+      <input type="text" id="pdf-site" placeholder="e.g. Floor 3 — Building A">
+    </div>
+    <div class="pdf-field">
+      <label>Technician</label>
+      <input type="text" id="pdf-tech" placeholder="Your name">
+    </div>
+    <div class="pdf-field">
+      <label>Notes</label>
+      <textarea id="pdf-notes" rows="3" placeholder="Observations, recommendations..."></textarea>
+    </div>
+    <div class="pdf-modal-actions">
+      <button class="survey-btn" onclick="closePdfModal()">Cancel</button>
+      <button class="survey-btn pdf" onclick="exportPDF()">&#9113; Generate PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- Calibration distance modal -->
+<div id="calib-modal">
+  <div class="pdf-modal-box">
+    <h3>&#9141; Set Scale</h3>
+    <p style="font-size:11px;color:var(--text-dim);margin-top:-6px;">Enter the real-world distance between the two points you clicked.</p>
+    <div class="pdf-field">
+      <label>Distance</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="number" id="calib-dist-val" min="0.1" step="0.1" value="10" style="flex:1;">
+        <select id="calib-dist-unit" style="font-family:var(--mono);font-size:12px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:6px 8px;outline:none;">
+          <option value="m">metres</option>
+          <option value="ft">feet</option>
+        </select>
+      </div>
+    </div>
+    <div class="pdf-modal-actions">
+      <button class="survey-btn" onclick="cancelCalib()">Cancel</button>
+      <button class="survey-btn calib" onclick="confirmCalib()">&#9141; Set Scale</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// MAIN DIAGNOSTIC LOGIC
+// ═══════════════════════════════════════════════════════
+let allNetworks     = [];
+let activeBand      = 'all';
+let activeMbr       = 'all';
+let openRow         = null;
+let wlanpiActiveMbr = null;
+let connectedAp     = null;   // {ssid, bssid, rssi, channel, band, freq_mhz}
+let sortCol         = 'rssi';
+let sortDir         = -1;   // -1 = descending, 1 = ascending
+
+function setSort(col) {
+  if (sortCol === col) {
+    sortDir = -sortDir;
+  } else {
+    sortCol = col;
+    sortDir = (col === 'ssid' || col === 'bssid') ? 1 : -1;
+  }
+  document.querySelectorAll('.net-table th[data-sort]').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.sort === sortCol) {
+      th.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
+    }
+  });
+  renderTable();
+}
+
+function sortedNetworks() {
+  const nets = filteredNetworks().slice();
+  // Pre-compute CCC count for sorting
+  const groups80   = [[36,40,44,48],[52,56,60,64],[100,104,108,112],
+                      [116,120,124,128],[132,136,140,144],[149,153,157,161]];
+  const groups80_6 = [[1,5,9,13],[17,21,25,29],[33,37,41,45],[49,53,57,61],
+                      [65,69,73,77],[81,85,89,93],[97,101,105,109],[113,117,121,125],
+                      [129,133,137,141],[145,149,153,157],[161,165,169,173],
+                      [177,181,185,189],[193,197,201,205],[209,213,217,221],[225,229,233]];
+  function cccCount(net) {
+    const ch = net.channel;
+    return allNetworks.filter(other => {
+      if (other.bssid === net.bssid || other.band !== net.band) return false;
+      if (net.has_2_4ghz) return Math.abs(other.channel - ch) <= 4;
+      if (net.has_6ghz) {
+        if (other.channel === ch) return true;
+        const gA = groups80_6.find(g=>g.includes(ch));
+        const gB = groups80_6.find(g=>g.includes(other.channel));
+        return gA && gB && gA[0] === gB[0];
+      }
+      if (other.channel === ch) return true;
+      const gA = groups80.find(g=>g.includes(ch));
+      const gB = groups80.find(g=>g.includes(other.channel));
+      return gA && gB && gA[0] === gB[0];
+    }).length;
+  }
+
+  return nets.sort((a, b) => {
+    let av, bv;
+    switch (sortCol) {
+      case 'ssid':       av = a.ssid.toLowerCase();       bv = b.ssid.toLowerCase();       break;
+      case 'bssid':      av = a.bssid.toLowerCase();      bv = b.bssid.toLowerCase();       break;
+      case 'channel':    av = a.channel  || 0;            bv = b.channel  || 0;            break;
+      case 'rssi':       av = a.rssi;                     bv = b.rssi;                     break;
+      case 'distance_m': av = a.distance_m;               bv = b.distance_m;               break;
+      case 'mbr':        av = a.mbr.best_supported || 0;  bv = b.mbr.best_supported || 0;  break;
+      case 'ch_util':    av = a.ch_util_pct ?? 999;       bv = b.ch_util_pct ?? 999;       break;
+      case 'ccc':        av = cccCount(a);                bv = cccCount(b);                break;
+      default:           av = a.rssi;                     bv = b.rssi;
+    }
+    if (av < bv) return -sortDir;
+    if (av > bv) return  sortDir;
+    return 0;
+  });
+}
+
+function rssiColor(rssi) {
+  if (rssi >= -55) return '#39ff7a';
+  if (rssi >= -67) return '#1fcc57';
+  if (rssi >= -70) return '#f5a623';
+  return '#ff4545';
+}
+function rssiPct(rssi) {
+  return Math.max(0, Math.min(100, ((rssi + 90) / 60) * 100)).toFixed(1);
+}
+function utilColor(pct) {
+  if (pct === null || pct === undefined) return 'badge-dim';
+  if (pct < 25)  return 'badge-good';
+  if (pct < 50)  return 'badge-warn';
+  return 'badge-danger';
+}
+
+function severityClass(sev) {
+  return {good:'badge-good',warning:'badge-warn',danger:'badge-danger'}[sev] || 'badge-dim';
+}
+
+function setBand(el) {
+  document.querySelectorAll('[data-band]').forEach(e => e.classList.remove('active'));
+  el.classList.add('active'); activeBand = el.dataset.band; renderTable();
+}
+function setMbr(el) {
+  document.querySelectorAll('[data-mbr]').forEach(e => e.classList.remove('active'));
+  el.classList.add('active'); activeMbr = el.dataset.mbr; renderTable();
+}
+
+function filteredNetworks() {
+  const q = document.getElementById('ssid-filter').value.toLowerCase();
+  return allNetworks.filter(n => {
+    if (q && !n.ssid.toLowerCase().includes(q)) return false;
+    if (activeBand === '2.4' && !n.has_2_4ghz) return false;
+    if (activeBand === '5'   && !n.has_5ghz)   return false;
+    if (activeBand === '6'   && !n.has_6ghz)   return false;
+    if (activeMbr !== 'all') {
+      if (!n.mbr.best_supported || n.mbr.best_supported < parseInt(activeMbr)) return false;
+    }
+    return true;
+  });
+}
+
+function updateSummary(networks) {
+  document.getElementById('s-total').textContent  = networks.length;
+  document.getElementById('s-24').textContent     = networks.filter(n => n.has_2_4ghz).length;
+  document.getElementById('s-6').textContent      = networks.filter(n => n.has_6ghz).length;
+  document.getElementById('s-mbr24').textContent  = networks.filter(n => n.mbr.best_supported >= 24).length;
+}
+
+function updateMbrBanner(mbr) {
+  const banner = document.getElementById('wlanpi-mbr-banner');
+  const val    = document.getElementById('banner-active-mbr');
+  if (mbr !== null && mbr !== undefined) {
+    val.textContent = `${mbr} Mbps`;
+    banner.classList.add('visible');
+  } else {
+    banner.classList.remove('visible');
+  }
+}
+
+function renderTable() {
+  const nets  = sortedNetworks();
+  const tbody = document.getElementById('net-tbody');
+  if (!nets.length) {
+    tbody.innerHTML = '<tr><td colspan="10" class="empty">No networks match the filter.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = '';
+
+  // ── CCC detection ──────────────────────────────────────
+  // 2.4 GHz: overlapping channels = within ±4 channels
+  // 5 GHz: same channel exact OR same 80 MHz group
+  // 6 GHz: same channel exact OR same 80 MHz group (PSC-aware)
+  const groups80 = [[36,40,44,48],[52,56,60,64],[100,104,108,112],
+                    [116,120,124,128],[132,136,140,144],[149,153,157,161]];
+  const groups80_6 = [[1,5,9,13],[17,21,25,29],[33,37,41,45],[49,53,57,61],
+                      [65,69,73,77],[81,85,89,93],[97,101,105,109],[113,117,121,125],
+                      [129,133,137,141],[145,149,153,157],[161,165,169,173],
+                      [177,181,185,189],[193,197,201,205],[209,213,217,221],[225,229,233]];
+
+  function cccGroup5(ch) { return groups80.find(g => g.includes(ch)) || null; }
+  function cccGroup6(ch) { return groups80_6.find(g => g.includes(ch)) || null; }
+
+  function getCccNeighbors(net, allNets) {
+    const ch = net.channel;
+    return allNets.filter(other => {
+      if (other.bssid === net.bssid) return false;
+      if (other.band !== net.band) return false;  // only same band
+      if (net.has_2_4ghz) {
+        return Math.abs(other.channel - ch) <= 4;
+      } else if (net.has_6ghz) {
+        if (other.channel === ch) return true;
+        const gA = cccGroup6(ch), gB = cccGroup6(other.channel);
+        return gA && gB && gA[0] === gB[0];
+      } else {
+        if (other.channel === ch) return true;
+        const gA = cccGroup5(ch), gB = cccGroup5(other.channel);
+        return gA && gB && gA[0] === gB[0];
+      }
+    });
+  }
+  // ───────────────────────────────────────────────────────
+
+  nets.forEach((n, i) => {
+    const color = rssiColor(n.rssi);
+    const pct   = rssiPct(n.rssi);
+    const mbrSuppBadge = n.mbr.best_supported
+      ? `<span class="badge badge-good">${n.mbr.best_supported} Mbps</span>`
+      : `<span class="badge badge-danger">Marginal</span>`;
+    let mbrActiveBadge;
+    if (n.mbr.active_mbr !== null && n.mbr.active_mbr !== undefined) {
+      const cls = n.mbr.mismatch ? 'badge-warn' : 'badge-purple';
+      const icon = n.mbr.mismatch ? `<span class="mbr-mismatch-icon" title="Active MBR lower than supported">!</span>` : '';
+      mbrActiveBadge = `<span class="badge ${cls}">${n.mbr.active_mbr} Mbps</span>${icon}`;
+    } else {
+      mbrActiveBadge = `<span class="badge badge-dim">N/A</span>`;
+    }
+    const txAction = n.power.action || 'N/A';
+    const txLabel  = txAction.includes('dBm') || txAction.includes('+') ? txAction : txAction.toUpperCase();
+    const txDbmStr = n.ap_tx_dbm !== null && n.ap_tx_dbm !== undefined ? ` <span style="font-size:9px;opacity:0.75;">(${n.ap_tx_dbm}dBm)</span>` : '';
+    const txBadge  = `<span class="badge ${severityClass(n.power.severity)}" title="${n.power.advice}">${txLabel}</span>${txDbmStr}`;
+
+    let chUtilBadge;
+    if (n.ch_util_pct !== null && n.ch_util_pct !== undefined) {
+      chUtilBadge = `<span class="badge ${utilColor(n.ch_util_pct)}">${n.ch_util_pct}%</span>`;
+    } else {
+      chUtilBadge = `<span class="badge badge-dim">N/A</span>`;
+    }
+
+    // CCC badge
+    const cccNeighbors = getCccNeighbors(n, allNetworks);
+    let cccBadge;
+    if (cccNeighbors.length === 0) {
+      cccBadge = `<span class="badge badge-good">None</span>`;
+    } else {
+      const tooltip = cccNeighbors.map(o => `CH${o.channel} ${o.ssid}`).join('&#10;');
+      const cls = cccNeighbors.length >= 3 ? 'badge-danger' : 'badge-warn';
+      cccBadge = `<span class="badge ${cls}" title="${tooltip}" style="cursor:help;">${cccNeighbors.length} BSS</span>`;
+    }
+
+    const piBadge = n.seen_by_wlanpi ? `<span class="pi-tag">[Pi]</span>` : '';
+    const isConnected = connectedAp && n.bssid && connectedAp.bssid &&
+                        n.bssid.toLowerCase() === connectedAp.bssid.toLowerCase();
+    const connBadge = isConnected ? `<span class="badge-connected">&#9679; Connected</span>` : '';
+    const bandIndicator = n.has_2_4ghz
+      ? `<span class="badge badge-warn">2.4</span>`
+      : n.has_6ghz
+        ? `<span class="badge badge-6ghz">6</span>`
+        : `<span class="badge badge-dim">5</span>`;
+
+    const rowId = `row-${i}`, detailId = `detail-${i}`;
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    if (isConnected) tr.style.background = '#071a0f';
+    tr.innerHTML = `
+      <td><strong>${n.ssid}</strong>${piBadge}${connBadge}</td>
+      <td style="color:var(--text-dim);font-size:11px;">${n.bssid}</td>
+      <td><span class="badge ${n.has_6ghz ? 'badge-6ghz' : n.has_5ghz ? 'badge-blue' : 'badge-warn'}">${n.band}</span> &nbsp;<span style="color:var(--text-dim)">CH ${n.channel}</span></td>
+      <td><div class="rssi-bar-wrap">
+        <div class="rssi-bar"><div class="rssi-fill" style="width:${pct}%;background:${color};"></div></div>
+        <span style="color:${color};font-weight:500;">${n.rssi} dBm</span>
+      </div></td>
+      <td>${n.distance_m} m <span style="color:var(--text-dim);font-size:10px;">(${n.distance_label})</span></td>
+      <td>${bandIndicator}</td>
+      <td>${mbrSuppBadge}</td>
+      <td>${txBadge}</td>
+      <td>${chUtilBadge}</td>
+      <td>${cccBadge}</td>`;
+    tr.onclick = () => toggleDetail(detailId);
+    tbody.appendChild(tr);
+
+    const detailTr = document.createElement('tr');
+    detailTr.className = 'detail-row';
+    detailTr.innerHTML = `<td colspan="10"><div class="detail-panel" id="${detailId}"></div></td>`;
+    tbody.appendChild(detailTr);
+  });
+}
+
+function toggleDetail(detailId) {
+  const panel = document.getElementById(detailId);
+  if (!panel) return;
+  if (openRow && openRow !== detailId) {
+    const prev = document.getElementById(openRow);
+    if (prev) prev.classList.remove('open');
+  }
+  panel.classList.toggle('open');
+  openRow = panel.classList.contains('open') ? detailId : null;
+  if (panel.classList.contains('open') && !panel.dataset.rendered) {
+    renderDetail(panel, detailId); panel.dataset.rendered = '1';
+  }
+}
+
+function renderDetail(panel, detailId) {
+  const idx = parseInt(detailId.split('-')[1]);
+  const n   = sortedNetworks()[idx];
+  if (!n) return;
+  const adviceClass = {good:'',warning:'warn',danger:'danger'}[n.power.severity] || '';
+  const suppRates = n.mbr.supported_rates && n.mbr.supported_rates.length
+    ? n.mbr.supported_rates.map(r => `<span class="badge badge-good" style="margin-right:3px;">${r} Mbps</span>`).join('')
+    : '<span class="badge badge-danger">None</span>';
+  const activeMbrHtml = (n.mbr.active_mbr !== null && n.mbr.active_mbr !== undefined)
+    ? `<span class="badge badge-purple">${n.mbr.active_mbr} Mbps</span>`
+    : `<span class="badge badge-dim">Not available</span>`;
+  const mismatchHtml = n.mbr.mismatch
+    ? `<div class="mbr-mismatch-box">Active MBR (${n.mbr.active_mbr} Mbps) is lower than supported (${n.mbr.best_supported} Mbps). May indicate interference or retries.</div>`
+    : '';
+  const attenDb = n.attenuation_db !== undefined ? n.attenuation_db : 3;
+  panel.innerHTML = `
+    <div class="detail-inner">
+      <div class="detail-section">
+        <h4>Distance (Log-Distance)</h4>
+        <div class="detail-kv">
+          <div class="kv"><span class="k">Model</span><span class="v">n=3.5 indoor</span></div>
+          <div class="kv"><span class="k">TX Power</span><span class="v ${n.ap_tx_dbm !== null && n.ap_tx_dbm !== undefined ? 'good' : ''}">${n.ap_tx_dbm !== null && n.ap_tx_dbm !== undefined ? n.ap_tx_dbm + ' dBm' : '20 dBm (default)'}</span></div>
+          <div class="kv"><span class="k">RSSI</span><span class="v">${n.rssi} dBm</span></div>
+          <div class="kv"><span class="k">Freq.</span><span class="v">${n.frequency_mhz || '?'} MHz</span></div>
+          <div class="kv"><span class="k">Est. distance</span><span class="v good">${n.distance_m} m</span></div>
+          <div class="kv"><span class="k">Zone</span><span class="v">${n.distance_label}</span></div>
+          <div class="kv"><span class="k">Band / CH</span><span class="v">${n.band} / ${n.channel}</span></div>
+          <div class="kv"><span class="k">BSSID</span><span class="v" style="font-size:10px;">${n.bssid}</span></div>
+        </div>
+      </div>
+      <div class="detail-section">
+        <h4>${n.band} Radio</h4>
+        <div class="detail-kv">
+          <div class="kv"><span class="k">Band</span><span class="v">${n.band}</span></div>
+          <div class="kv"><span class="k">Channel</span><span class="v">${n.channel}</span></div>
+          <div class="kv"><span class="k">Frequency</span><span class="v">${n.frequency_mhz} MHz</span></div>
+          ${n.ch_util_pct !== null && n.ch_util_pct !== undefined ? `
+          <div class="kv"><span class="k">CH Util (QBSS)</span><span class="v ${n.ch_util_pct < 25 ? 'good' : n.ch_util_pct < 50 ? 'warn' : 'danger'}">${n.ch_util_pct}%</span></div>
+          <div class="kv"><span class="k">Station count</span><span class="v">${n.station_count !== null && n.station_count !== undefined ? n.station_count : 'N/A'}</span></div>
+          ` : '<div class="kv"><span class="k">CH Util (QBSS)</span><span class="v">Not reported</span></div>'}
+          ${n.has_2_4ghz ? '<div class="advice-box warn" style="margin-top:8px;">2.4 GHz enabled — verify co-channel interference.</div>' : ''}
+          ${n.has_6ghz ? '<div class="advice-box" style="margin-top:8px;">6 GHz (Wi-Fi 6E/7) — low interference, high throughput. Verify client support.</div>' : ''}
+        </div>
+      </div>
+      <div class="detail-section">
+        <h4>MBR - Supported vs Active</h4>
+        <div class="mbr-compare">
+          <div class="mbr-row"><span class="mbr-label">Supported (RSSI)</span><span>${suppRates}</span></div>
+          <div class="mbr-row"><span class="mbr-label">Active (WLANPi)</span><span>${activeMbrHtml}</span></div>
+        </div>
+        ${mismatchHtml}
+        <div class="detail-kv" style="margin-top:10px;">
+          <div class="thr-row"><span class="thr-k">24 Mbps >= -74 dBm</span><span class="v ${n.rssi>=-74?'good':'danger'}">${n.rssi>=-74?'V':'X'}</span></div>
+          <div class="thr-row"><span class="thr-k">12 Mbps >= -79 dBm</span><span class="v ${n.rssi>=-79?'good':'danger'}">${n.rssi>=-79?'V':'X'}</span></div>
+          <div class="thr-row"><span class="thr-k"> 6 Mbps >= -82 dBm</span><span class="v ${n.rssi>=-82?'good':'danger'}">${n.rssi>=-82?'V':'X'}</span></div>
+        </div>
+      </div>
+      <div class="detail-section">
+        <h4>AP TX Power &amp; Action</h4>
+        <div class="detail-kv">
+          <div class="kv"><span class="k">AP TX Power</span><span class="v ${n.ap_tx_dbm !== null && n.ap_tx_dbm !== undefined ? 'good' : 'warn'}">${n.ap_tx_dbm !== null && n.ap_tx_dbm !== undefined ? n.ap_tx_dbm + ' dBm' : 'Unknown (est. 20 dBm)'}</span></div>
+          <div class="kv"><span class="k">Source</span><span class="v" style="font-size:10px;color:var(--text-dim);">${n.ap_tx_dbm !== null && n.ap_tx_dbm !== undefined ? 'Country / TPC IE' : 'Default fallback'}</span></div>
+          <div class="kv"><span class="k">Retry risk</span><span class="v ${n.power.retry_risk?'danger':'good'}">${n.power.retry_risk?'YES':'NO'}</span></div>
+          <div class="kv"><span class="k">Action</span><span class="v ${severityClass(n.power.severity).replace('badge-','')}">${n.power.action.toUpperCase()}</span></div>
+        </div>
+        <div class="advice-box ${adviceClass}" style="margin-top:10px;">${n.power.advice}</div>
+      </div>
+    </div>`;
+}
+
+async function fetchData() {
+  try {
+    const res  = await fetch('/api/scan');
+    const data = await res.json();
+    allNetworks     = data.networks || [];
+    wlanpiActiveMbr = data.wlanpi_active_mbr ?? null;
+    connectedAp     = data.connected_ap || null;
+
+    document.getElementById('status-dot').classList.toggle('active', allNetworks.length > 0);
+    document.getElementById('last-updated').textContent = data.last_updated ? `Last scan: ${data.last_updated}` : '-';
+
+    const srcEl = document.getElementById('scan-source');
+    if (data.scan_source === 'wlanpi') {
+      srcEl.textContent = 'WLANPi scan'; srcEl.style.color = 'var(--blue)'; srcEl.style.borderColor = '#0d3a5a';
+    } else if (data.scan_source === 'win32') {
+      srcEl.textContent = 'netsh'; srcEl.style.color = 'var(--amber)'; srcEl.style.borderColor = '#5a3d00';
+    } else if (data.scan_source === 'darwin') {
+      srcEl.textContent = 'CoreWLAN'; srcEl.style.color = 'var(--green2)'; srcEl.style.borderColor = 'var(--green-dim)';
+    } else {
+      srcEl.textContent = data.scan_source || '-'; srcEl.style.color = 'var(--text-dim)'; srcEl.style.borderColor = 'var(--border)';
+    }
+
+    // Location Services indicator (macOS only)
+    const locEl = document.getElementById('loc-status');
+    if (data.scan_source === 'darwin') {
+      const nets    = data.networks || [];
+      const blank   = nets.filter(n => !n.ssid).length;
+      const total   = nets.length;
+      locEl.style.display = '';
+      if (total > 0 && blank === total) {
+        locEl.textContent = 'Location: DENIED';
+        locEl.style.color = 'var(--red)'; locEl.style.borderColor = '#5a1010';
+        locEl.title = 'All SSIDs are blank. Grant Location Services in System Settings > Privacy & Security > Location Services > RF-DIAG.';
+      } else if (blank > 0) {
+        locEl.textContent = `Location: PARTIAL`;
+        locEl.style.color = 'var(--amber)'; locEl.style.borderColor = '#5a3d00';
+        locEl.title = `${blank} of ${total} networks have blank SSIDs.`;
+      } else {
+        locEl.textContent = 'Location: OK';
+        locEl.style.color = 'var(--green2)'; locEl.style.borderColor = 'var(--green-dim)';
+        locEl.title = 'Location Services granted — SSIDs visible.';
+      }
+    } else {
+      locEl.style.display = 'none';
+    }
+
+    updateSummary(allNetworks);
+    renderChannelChart();
+    updateMbrBanner(wlanpiActiveMbr);
+    renderTable();
+    updateSurveySsidList();
+    updateLiveRssi();
+
+    const grid = document.getElementById('pi-grid');
+    if (data.wlanpi_ssids && data.wlanpi_ssids.length) {
+      grid.innerHTML = data.wlanpi_ssids.map(s => `<span class="pi-ssid">${s}</span>`).join('');
+    } else {
+      grid.innerHTML = data.wlanpi_ok === false
+        ? '<span style="color:var(--text-mute);font-size:11px;">WLANPi unreachable</span>'
+        : '<span style="color:var(--text-mute);font-size:11px;">No SSIDs from WLANPi</span>';
+    }
+  } catch(e) { console.error('Fetch error:', e); }
+}
+
+async function forceRefresh() {
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Scanning...';
+  await fetch('/api/refresh', {method:'POST'});
+  await new Promise(r => setTimeout(r, 2000));
+  await fetchData();
+  btn.disabled = false; btn.innerHTML = '&#8635; Scan';
+}
+
+fetchData();
+setInterval(fetchData, 31000);
+
+
+// ═══════════════════════════════════════════════════════
+// CHANNEL OCCUPANCY CHART
+// ═══════════════════════════════════════════════════════
+function renderChannelChart() {
+  const el = document.getElementById('ch-chart');
+  if (!el || !allNetworks.length) { if(el) el.innerHTML = ''; return; }
+
+  const bands = [
+    { label: '2.4G',  key: 'has_2_4ghz', color: '#f5a623',
+      channels: [1,2,3,4,5,6,7,8,9,10,11,12,13] },
+    { label: '5G',    key: 'has_5ghz',   color: '#4db8ff', channels: null },
+    { label: '6G',    key: 'has_6ghz',   color: '#b06fff', channels: null },
+  ];
+
+  let html = '';
+  for (const { label, key, color, channels } of bands) {
+    const nets = allNetworks.filter(n => n[key]);
+    if (!nets.length) continue;
+
+    const counts = {};
+    nets.forEach(n => { counts[n.channel] = (counts[n.channel] || 0) + 1; });
+    const usedChs  = [...new Set(nets.map(n => n.channel))].sort((a,b) => a-b);
+    const showChs  = channels || usedChs;
+    const maxCount = Math.max(...Object.values(counts), 1);
+
+    const bars = showChs.map(ch => {
+      const count  = counts[ch] || 0;
+      const h      = count ? Math.max(4, Math.round(count / maxCount * 28)) : 2;
+      const op     = count ? 1 : 0.18;
+      const tip    = count ? `CH ${ch}: ${count} AP${count > 1 ? 's' : ''}` : `CH ${ch}`;
+      return `<div class="ch-bar" title="${tip}" onclick="filterByChannel(${ch},'${label}')">
+        <div class="ch-bar-fill" style="height:${h}px;background:${color};opacity:${op};"></div>
+        <span class="ch-bar-lbl">${ch}</span>
+      </div>`;
+    }).join('');
+
+    html += `<div class="ch-band-row">
+      <span class="ch-band-label">${label}</span>
+      <div class="ch-bar-wrap">${bars}</div>
+    </div>`;
+  }
+  el.innerHTML = html || '';
+}
+
+function filterByChannel(ch, bandLabel) {
+  const key = bandLabel.startsWith('2') ? '2.4' : bandLabel.startsWith('6') ? '6' : '5';
+  document.querySelectorAll('[data-band]').forEach(e => e.classList.remove('active'));
+  const btn = document.querySelector(`[data-band="${key}"]`);
+  if (btn) { btn.classList.add('active'); activeBand = key; }
+  renderTable();
+}
+
+
+// ═══════════════════════════════════════════════════════
+// CSV EXPORT
+// ═══════════════════════════════════════════════════════
+function exportCSV() {
+  const nets = sortedNetworks();
+  if (!nets.length) { alert('No networks to export.'); return; }
+
+  const headers = [
+    'SSID','BSSID','Band','Channel','Freq (MHz)','RSSI (dBm)',
+    'Distance (m)','MBR Supported (Mbps)','AP TX Power (dBm)',
+    'CH Util (%)','Station Count','CCC Neighbors','Connected'
+  ];
+
+  const rows = nets.map(n => {
+    const ccc = allNetworks.filter(o => {
+      if (o.bssid === n.bssid || o.band !== n.band) return false;
+      if (n.has_2_4ghz) return Math.abs(o.channel - n.channel) <= 4;
+      return o.channel === n.channel;
+    }).length;
+    const isConn = connectedAp &&
+      (n.bssid || '').toLowerCase() === (connectedAp.bssid || '').toLowerCase();
+    return [
+      `"${(n.ssid || '').replace(/"/g, '""')}"`,
+      n.bssid || '',
+      n.band || '',
+      n.channel ?? '',
+      n.frequency_mhz ?? '',
+      n.rssi ?? '',
+      n.distance_m ?? '',
+      n.mbr.best_supported ?? '',
+      n.ap_tx_dbm ?? '',
+      n.ch_util_pct ?? '',
+      n.station_count ?? '',
+      ccc,
+      isConn ? 'Yes' : 'No',
+    ].join(',');
+  });
+
+  const csv  = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `rfdiag_${new Date().toISOString().slice(0,19).replace(/[:.]/g,'-')}.csv`;
+  a.click();
+}
+
+
+// ═══════════════════════════════════════════════════════
+// SURVEY MODULE v2 — multi-SSID, IDW heatmap, threshold, PDF
+// ═══════════════════════════════════════════════════════
+let surveyOpen    = false;
+let surveyPoints  = [];   // [{x,y,rssi,ssid,ssidIdx,ts}]  ssidIdx: 1|2
+let planLoaded    = false;
+let selectedSsid  = '';
+let selectedSsid2 = '';
+let thresholdDbm  = -70;
+
+// SSID colors
+const SSID_COLOR1 = '#4db8ff';   // blue
+const SSID_COLOR2 = '#b06fff';   // purple
+
+const wrap          = () => document.getElementById('survey-canvas-wrap');
+const heatCanvas    = () => document.getElementById('heatmap-canvas');
+const thrCanvas     = () => document.getElementById('threshold-canvas');
+const ptCanvas      = () => document.getElementById('points-canvas');
+
+// ── Fast RSSI poll for survey (every 3s when survey open) ──
+let _rssiPollTimer = null;
+
+function startRssiPoll() {
+  stopRssiPoll();
+  _rssiPollTimer = setInterval(async () => {
+    if (!surveyOpen) return;
+    const ssids = [selectedSsid, selectedSsid2].filter(Boolean);
+    if (!ssids.length) return;
+    try {
+      const params = ssids.map(s => `ssid=${encodeURIComponent(s)}`).join('&');
+      const res  = await fetch(`/api/rssi?${params}`);
+      const data = await res.json();
+      // Update allNetworks cache with fresh RSSI
+      ssids.forEach(ssid => {
+        if (data[ssid] !== null && data[ssid] !== undefined) {
+          const net = allNetworks.find(n => n.ssid === ssid);
+          if (net) net.rssi = data[ssid];
+        }
+      });
+      updateLiveRssi();
+    } catch(e) {}
+  }, 3000);
+}
+
+function stopRssiPoll() {
+  if (_rssiPollTimer) { clearInterval(_rssiPollTimer); _rssiPollTimer = null; }
+}
+
+function toggleSurvey() {
+  surveyOpen = !surveyOpen;
+  document.getElementById('survey-panel').classList.toggle('open', surveyOpen);
+  document.getElementById('survey-toggle').classList.toggle('active', surveyOpen);
+  document.getElementById('survey-overlay').classList.toggle('visible', surveyOpen);
+  if (surveyOpen) {
+    setTimeout(() => resizeCanvases(), 350);
+    startRssiPoll();
+  } else {
+    stopRssiPoll();
+  }
+}
+
+async function surveyRefresh() {
+  const btn = document.getElementById('survey-refresh-btn');
+  btn.disabled = true;
+  btn.textContent = '↻ …';
+  await fetch('/api/refresh', {method:'POST'});
+  await new Promise(r => setTimeout(r, 3000));
+  await fetchData();
+  btn.disabled = false;
+  btn.textContent = '↻ Scan';
+}
+
+function resizeCanvases() {
+  const w = wrap();
+  const rect = w.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const W = Math.round(rect.width);
+  const H = Math.round(rect.height);
+  [heatCanvas(), thrCanvas(), calibCanvas(), ptCanvas()].forEach(c => {
+    c.width       = W * dpr;
+    c.height      = H * dpr;
+    c.style.width  = W + 'px';
+    c.style.height = H + 'px';
+    const ctx = c.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+  });
+  drawHeatmap();
+  drawThreshold();
+  drawCalib();
+  drawPoints();
+}
+
+function triggerPlanUpload() { document.getElementById('plan-upload').click(); }
+
+function loadPlan(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+
+  // File size check
+  const fileMB = file.size / (1024 * 1024);
+  const warn = document.getElementById('plan-size-warn');
+
+  if (fileMB > 15) {
+    warn.textContent = `⚠ File too large (${fileMB.toFixed(1)} MB) — may cause browser hang. Resize to under 5 MB.`;
+    warn.style.color = 'var(--red)';
+    warn.style.display = 'block';
+  } else if (fileMB > 5) {
+    warn.textContent = `⚠ Large file (${fileMB.toFixed(1)} MB) — PDF export may be slow. Recommended: under 5 MB.`;
+    warn.style.color = 'var(--amber)';
+    warn.style.display = 'block';
+  } else {
+    warn.style.display = 'none';
+  }
+
+  const url = URL.createObjectURL(file);
+  const img = document.getElementById('plan-img');
+  img.onload = () => {
+    // Pixel dimension check
+    const maxPx = Math.max(img.naturalWidth, img.naturalHeight);
+    if (maxPx > 3000) {
+      warn.textContent = (warn.style.display === 'block' ? warn.textContent + ' ' : '')
+        + `⚠ High resolution (${img.naturalWidth}×${img.naturalHeight}px) — recommend max 1800px. Use: sips -Z 1800 file.png`;
+      warn.style.color = 'var(--amber)';
+      warn.style.display = 'block';
+    }
+
+    planLoaded = true;
+    document.getElementById('plan-drop-zone').classList.add('has-plan');
+    document.getElementById('survey-placeholder').style.display = 'none';
+    // Double resize — first after panel animation, second after layout settles
+    setTimeout(() => { resizeCanvases(); updateLegend(); }, 400);
+    setTimeout(() => { resizeCanvases(); }, 800);
+  };
+  img.src = url;
+  img.style.display = 'block';
+}
+
+function handleDrop(evt) {
+  evt.preventDefault();
+  document.getElementById('plan-drop-zone').classList.remove('drag-over');
+  const file = evt.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    document.getElementById('plan-upload').files = dt.files;
+    loadPlan({target: {files: [file]}});
+  }
+}
+
+function updateThreshold() {
+  thresholdDbm = parseInt(document.getElementById('threshold-slider').value);
+  document.getElementById('threshold-val').textContent = `${thresholdDbm} dBm`;
+  drawThreshold();
+}
+
+function updateSurveySsidList() {
+  [
+    {sel: document.getElementById('survey-ssid-select'),  placeholder: '-- select SSID --'},
+    {sel: document.getElementById('survey-ssid2-select'), placeholder: '-- none --'},
+  ].forEach(({sel, placeholder}, idx) => {
+    const prev = sel.value;
+    sel.innerHTML = `<option value="">${placeholder}</option>`;
+    allNetworks.forEach(n => {
+      const opt = document.createElement('option');
+      opt.value = n.ssid;
+      opt.textContent = `${n.ssid}  (${n.rssi} dBm)`;
+      sel.appendChild(opt);
+    });
+    if (prev) sel.value = prev;
+  });
+
+  selectedSsid  = document.getElementById('survey-ssid-select').value;
+  selectedSsid2 = document.getElementById('survey-ssid2-select').value;
+
+  document.getElementById('survey-ssid-select').onchange  = () => { selectedSsid  = document.getElementById('survey-ssid-select').value;  updateLiveRssi(); };
+  document.getElementById('survey-ssid2-select').onchange = () => { selectedSsid2 = document.getElementById('survey-ssid2-select').value; updateLiveRssi(); };
+}
+
+function getLiveRssi(ssid) {
+  if (!ssid) return null;
+  const net = allNetworks.find(n => n.ssid === ssid);
+  return net ? net.rssi : null;
+}
+
+function updateLiveRssi() {
+  const rssi1 = getLiveRssi(selectedSsid);
+  const rssi2 = getLiveRssi(selectedSsid2);
+
+  const el1 = document.getElementById('live-rssi-val');
+  const nm1 = document.getElementById('live-ssid-name');
+  if (rssi1 !== null) {
+    el1.textContent = `${rssi1} dBm`; el1.style.color = rssiColor(rssi1); nm1.textContent = selectedSsid;
+  } else {
+    el1.textContent = '--'; el1.style.color = 'var(--text-mute)'; nm1.textContent = selectedSsid ? 'Not found' : '';
+  }
+
+  const hasSecond = !!selectedSsid2;
+  document.getElementById('rssi-sep2').style.display   = hasSecond ? '' : 'none';
+  document.getElementById('rssi-block2').style.display = hasSecond ? '' : 'none';
+  if (hasSecond) {
+    const el2 = document.getElementById('live-rssi-val2');
+    const nm2 = document.getElementById('live-ssid-name2');
+    if (rssi2 !== null) {
+      el2.textContent = `${rssi2} dBm`; el2.style.color = rssiColor(rssi2); nm2.textContent = selectedSsid2;
+    } else {
+      el2.textContent = '--'; el2.style.color = 'var(--text-mute)'; nm2.textContent = 'Not found';
+    }
+  }
+}
+
+function handleMapClick(evt) {
+  if (!planLoaded) return;
+  // Use the points canvas rect directly — most accurate reference
+  const canvas = ptCanvas();
+  const rect = canvas.getBoundingClientRect();
+  const x = (evt.clientX - rect.left) / rect.width;
+  const y = (evt.clientY - rect.top)  / rect.height;
+
+  // Calibration mode intercepts all clicks
+  if (calibMode) { handleCalibClick(x, y); return; }
+
+  // Record point for whichever SSID(s) are selected
+  let recorded = false;
+  [[selectedSsid, 1], [selectedSsid2, 2]].forEach(([ssid, idx]) => {
+    const rssi = getLiveRssi(ssid);
+    if (ssid && rssi !== null) {
+      surveyPoints.push({x, y, rssi, ssid, ssidIdx: idx, ts: Date.now()});
+      recorded = true;
+    }
+  });
+  if (!recorded) { alert('Select at least one SSID that appears in the scan.'); return; }
+
+  drawHeatmap();
+  drawThreshold();
+  drawPoints();
+  renderPointsList();
+  updateLiveRssi();
+}
+
+// ── IDW Heatmap ──────────────────────────────────────────
+function rssiToColor(rssi, alpha) {
+  const t = Math.max(0, Math.min(1, (rssi + 90) / 60));
+  let r, g, b;
+  if (t < 0.5) {
+    const u = t / 0.5;
+    r = 255; g = Math.round(69 + u*(166-69)); b = Math.round(69*(1-u));
+  } else {
+    const u = (t-0.5)/0.5;
+    r = Math.round(245*(1-u)); g = Math.round(166+u*(255-166)); b = Math.round(35*(1-u));
+  }
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function idwRssi(px, py, points, power=2) {
+  let wSum = 0, vSum = 0;
+  for (const pt of points) {
+    const d = Math.sqrt((px-pt.x)**2 + (py-pt.y)**2);
+    if (d < 0.001) return pt.rssi;
+    const w = 1 / (d**power);
+    wSum += w; vSum += w * pt.rssi;
+  }
+  return wSum === 0 ? -90 : vSum / wSum;
+}
+
+function drawHeatmap() {
+  const canvas = heatCanvas();
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (surveyPoints.length === 0) return;
+
+  const W = canvas.width, H = canvas.height;
+  const step = Math.max(4, Math.min(12, Math.floor(Math.min(W,H)/60)));
+  const imgData = ctx.createImageData(W, H);
+
+  // Split points by SSID index
+  const pts1 = surveyPoints.filter(p => p.ssidIdx === 1);
+  const pts2 = surveyPoints.filter(p => p.ssidIdx === 2);
+
+  for (let py = 0; py < H; py += step) {
+    for (let px = 0; px < W; px += step) {
+      const nx = px/W, ny = py/H;
+
+      // Blend SSID1 and SSID2 if both present
+      let rssi = null;
+      if (pts1.length && pts2.length) {
+        const r1 = idwRssi(nx, ny, pts1);
+        const r2 = idwRssi(nx, ny, pts2);
+        rssi = Math.max(r1, r2);  // show best signal
+      } else if (pts1.length) {
+        rssi = idwRssi(nx, ny, pts1);
+      } else if (pts2.length) {
+        rssi = idwRssi(nx, ny, pts2);
+      }
+      if (rssi === null) continue;
+
+      let r, g, b, alpha;
+      if (heatmapMode === 'mbr') {
+        [r, g, b, alpha] = mbrToColor(rssi, 0.85);
+      } else {
+        const t = Math.max(0, Math.min(1, (rssi+90)/60));
+        if (t < 0.5) { const u=t/0.5; r=255; g=Math.round(69+u*(166-69)); b=Math.round(69*(1-u)); }
+        else { const u=(t-0.5)/0.5; r=Math.round(245*(1-u)); g=Math.round(166+u*(255-166)); b=Math.round(35*(1-u)); }
+        alpha = 170;
+      }
+
+      for (let dy=0; dy<step && py+dy<H; dy++) {
+        for (let dx=0; dx<step && px+dx<W; dx++) {
+          const i = ((py+dy)*W + (px+dx))*4;
+          imgData.data[i]   = r;
+          imgData.data[i+1] = g;
+          imgData.data[i+2] = b;
+          imgData.data[i+3] = alpha;
+        }
+      }
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+// ── Threshold contour line ───────────────────────────────
+function drawThreshold() {
+  const canvas = thrCanvas();
+  const ctx = canvas.getContext('2d');
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+  if (surveyPoints.length < 2) return;
+
+  const step = Math.max(6, Math.floor(Math.min(W,H)/50));
+
+  ctx.strokeStyle = '#f5a623';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+
+  // Simple marching-squares-lite: draw line segments where IDW crosses threshold
+  const grid = [];
+  for (let py = 0; py <= H; py += step) {
+    const row = [];
+    for (let px = 0; px <= W; px += step) {
+      row.push(idwRssi(px/W, py/H, surveyPoints) >= thresholdDbm ? 1 : 0);
+    }
+    grid.push(row);
+  }
+
+  const cols = Math.floor(W/step);
+  const rows = Math.floor(H/step);
+
+  ctx.beginPath();
+  for (let ry=0; ry<rows; ry++) {
+    for (let rx=0; rx<cols; rx++) {
+      const tl=grid[ry][rx], tr=grid[ry][rx+1]||0;
+      const bl=grid[ry+1]?.[rx]||0, br=grid[ry+1]?.[rx+1]||0;
+      const x0=rx*step, y0=ry*step, x1=(rx+1)*step, y1=(ry+1)*step;
+      const mx=(x0+x1)/2, my=(y0+y1)/2;
+      if (tl!==tr) { ctx.moveTo(mx,y0); ctx.lineTo(mx,my); }
+      if (bl!==br) { ctx.moveTo(mx,y1); ctx.lineTo(mx,my); }
+      if (tl!==bl) { ctx.moveTo(x0,my); ctx.lineTo(mx,my); }
+      if (tr!==br) { ctx.moveTo(x1,my); ctx.lineTo(mx,my); }
+    }
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Label
+  ctx.fillStyle = '#f5a623';
+  ctx.font = 'bold 10px IBM Plex Mono, monospace';
+  ctx.fillText(`${thresholdDbm} dBm`, 6, H-8);
+}
+
+// ── Measurement points ───────────────────────────────────
+function drawPoints() {
+  const canvas = ptCanvas();
+  const ctx = canvas.getContext('2d');
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+
+  surveyPoints.forEach((pt, i) => {
+    const cx = pt.x * W;
+    const cy = pt.y * H;
+    const col = pt.ssidIdx === 2 ? SSID_COLOR2 : SSID_COLOR1;
+
+    ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI*2);
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+
+    ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI*2);
+    ctx.fillStyle = col; ctx.fill();
+
+    ctx.font = 'bold 9px IBM Plex Mono, monospace';
+    ctx.fillStyle = col; ctx.textAlign = 'center';
+    ctx.fillText(`${pt.rssi}`, cx, cy-15);
+    ctx.fillText(`#${i+1}`, cx, cy+22);
+  });
+}
+
+// ── Points list ──────────────────────────────────────────
+function renderPointsList() {
+  const list = document.getElementById('survey-points-list');
+  if (!surveyPoints.length) { list.innerHTML = ''; return; }
+  list.innerHTML = surveyPoints.map((pt, i) => {
+    const distLabel = (calibScale && i > 0)
+      ? ` · ${pixelsToReal(surveyPoints[0].x, surveyPoints[0].y, pt.x, pt.y)} from #1`
+      : '';
+    return `
+    <div class="survey-point-row">
+      <span style="color:var(--text-mute);">#${i+1}</span>
+      <span class="pt-dot" style="background:${pt.ssidIdx===2?SSID_COLOR2:SSID_COLOR1};"></span>
+      <span class="pt-rssi" style="color:${rssiColor(pt.rssi)};">${pt.rssi} dBm</span>
+      <span style="color:var(--text-mute);font-size:9px;overflow:hidden;text-overflow:ellipsis;max-width:80px;">${pt.ssid}</span>
+      <span style="color:var(--amber);font-size:9px;">${distLabel}</span>
+      <button class="pt-del" onclick="deletePoint(${i})">&#10005;</button>
+    </div>`;
+  }).join('');
+}
+
+function deletePoint(idx) {
+  surveyPoints.splice(idx, 1);
+  drawHeatmap(); drawThreshold(); drawPoints(); renderPointsList();
+}
+
+function clearSurvey() {
+  if (surveyPoints.length > 0 && !confirm('Clear all survey points?')) return;
+  surveyPoints = [];
+  drawHeatmap(); drawThreshold(); drawPoints(); renderPointsList();
+}
+
+// ── Export JSON ──────────────────────────────────────────
+function exportJSON() {
+  if (!surveyPoints.length) { alert('No survey points to export.'); return; }
+  const data = {
+    exported: new Date().toISOString(),
+    ssid1: selectedSsid, ssid2: selectedSsid2,
+    threshold_dbm: thresholdDbm,
+    points: surveyPoints.map(p => ({
+      x_pct: +(p.x*100).toFixed(1), y_pct: +(p.y*100).toFixed(1),
+      rssi: p.rssi, ssid: p.ssid, ssid_idx: p.ssidIdx,
+      ts: new Date(p.ts).toISOString()
+    }))
+  };
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `wifi_survey_${Date.now()}.json`;
+  a.click();
+}
+
+// ── PDF Export ───────────────────────────────────────────
+function openPdfModal()  { document.getElementById('pdf-modal').classList.add('open'); }
+function closePdfModal() { document.getElementById('pdf-modal').classList.remove('open'); }
+
+function exportPDF() {
+  if (!surveyPoints.length) { alert('No survey points to export.'); return; }
+
+  const title  = document.getElementById('pdf-title').value  || 'Wi-Fi Survey Report';
+  const site   = document.getElementById('pdf-site').value   || '';
+  const tech   = document.getElementById('pdf-tech').value   || '';
+  const notes  = document.getElementById('pdf-notes').value  || '';
+  const date   = new Date().toLocaleString();
+
+  const thr    = MBR_THRESHOLDS[deviceMode];
+  const devLbl = deviceMode === 'phone' ? 'Smartphone' : 'Laptop';
+  const mbr24  = surveyPoints.filter(p=>p.rssi>=thr[24]).length;
+  const mbr12  = surveyPoints.filter(p=>p.rssi>=thr[12] && p.rssi<thr[24]).length;
+  const mbr6   = surveyPoints.filter(p=>p.rssi>=thr[6]  && p.rssi<thr[12]).length;
+  const mbrNone= surveyPoints.filter(p=>p.rssi<thr[6]).length;
+  const rssisAll = surveyPoints.map(p=>p.rssi);
+  const minR = Math.min(...rssisAll), maxR = Math.max(...rssisAll);
+  const avgR = Math.round(rssisAll.reduce((a,b)=>a+b,0)/rssisAll.length);
+  const aboveThresh = surveyPoints.filter(p=>p.rssi>=thresholdDbm).length;
+  const pct = Math.round(aboveThresh/surveyPoints.length*100);
+
+  // Merge plan + heatmap + threshold + points into one offscreen canvas
+  const pc = ptCanvas();
+  const dpr = window.devicePixelRatio || 1;
+  const W = pc.clientWidth, H = pc.clientHeight;
+  const offscreen = document.createElement('canvas');
+  offscreen.width  = pc.width;
+  offscreen.height = pc.height;
+  const oc = offscreen.getContext('2d');
+  const planImg = document.getElementById('plan-img');
+  if (planImg && planImg.naturalWidth > 0) oc.drawImage(planImg, 0, 0, pc.width, pc.height);
+  oc.globalAlpha = 0.6; oc.drawImage(heatCanvas(), 0, 0, pc.width, pc.height);
+  oc.globalAlpha = 1.0; oc.drawImage(thrCanvas(),  0, 0, pc.width, pc.height);
+  oc.drawImage(calibCanvas(), 0, 0, pc.width, pc.height);
+  
+  oc.scale(dpr, dpr);
+  surveyPoints.forEach((pt, i) => {
+    const cx = pt.x * W, cy = pt.y * H;
+    const col = pt.ssidIdx === 2 ? SSID_COLOR2 : SSID_COLOR1;
+    oc.beginPath(); oc.arc(cx, cy, 10, 0, Math.PI*2);
+    oc.strokeStyle = col; oc.lineWidth = 2; oc.stroke();
+    oc.beginPath(); oc.arc(cx, cy, 4, 0, Math.PI*2);
+    oc.fillStyle = col; oc.fill();
+    oc.font = 'bold 9px IBM Plex Mono, monospace';
+    oc.fillStyle = col; oc.textAlign = 'center';
+    oc.fillText(pt.rssi + ' dBm', cx, cy - 14);
+    oc.fillText('#' + (i+1), cx, cy + 22);
+  });
+
+  const mapDataUrl = offscreen.toDataURL('image/png');
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<title>${title}</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 32px; color: #1a2a1a; font-size: 13px; }
+  h1   { font-size: 22px; font-weight: 700; color: #0d3a0d; margin: 0 0 4px; }
+  .meta { font-size: 11px; color: #5a7a5a; margin-bottom: 20px; }
+  .stats { display: grid; grid-template-columns: repeat(5,1fr); gap: 12px; margin-bottom: 20px; }
+  .stat-box { background: #f0f7f0; border: 1px solid #c8e6c8; border-radius: 4px; padding: 10px 14px; }
+  .stat-box .val { font-size: 20px; font-weight: 700; color: #0d3a0d; }
+  .stat-box .lbl { font-size: 10px; color: #5a7a5a; text-transform: uppercase; letter-spacing: 1px; }
+  .map-wrap { border: 1px solid #c8e6c8; margin-bottom: 20px; }
+  .map-wrap img { width: 100%; display: block; }
+  .legend { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 11px; color:#5a7a5a; }
+  .legend-bar { flex:1; height:8px; border-radius:4px; background:linear-gradient(to right,#ff4545,#f5a623,#39ff7a); }
+  table { width:100%; border-collapse:collapse; font-size:11px; margin-bottom:20px; }
+  th { background:#e8f5e8; color:#2d5a2d; text-align:left; padding:6px 10px; font-size:10px; text-transform:uppercase; letter-spacing:1px; }
+  td { padding:5px 10px; border-bottom:1px solid #e0ede0; }
+  .notes-box { background:#f9fdf9; border:1px solid #c8e6c8; border-left:3px solid #39a85a; padding:12px 16px; font-size:12px; line-height:1.6; white-space:pre-wrap; }
+  .footer { margin-top:24px; font-size:10px; color:#aaa; border-top:1px solid #e0ede0; padding-top:10px; }
+  @media print { body { padding: 16px; } }
+</style></head><body>
+<h1>${title}</h1>
+<div class="meta">
+  ${site ? `<strong>Site:</strong> ${site} &nbsp;|&nbsp; ` : ''}
+  ${tech  ? `<strong>Technician:</strong> ${tech} &nbsp;|&nbsp; ` : ''}
+  <strong>Date:</strong> ${date}
+</div>
+
+<div class="stats">
+  <div class="stat-box"><div class="val">${surveyPoints.length}</div><div class="lbl">Points</div></div>
+  <div class="stat-box"><div class="val">${maxR} dBm</div><div class="lbl">Max RSSI</div></div>
+  <div class="stat-box"><div class="val">${avgR} dBm</div><div class="lbl">Avg RSSI</div></div>
+  <div class="stat-box"><div class="val">${minR} dBm</div><div class="lbl">Min RSSI</div></div>
+  <div class="stat-box"><div class="val">${pct}%</div><div class="lbl">Above ${thresholdDbm} dBm</div></div>
+</div>
+
+<h2 style="font-size:13px;color:#0d3a0d;margin:0 0 10px;">MBR Coverage — ${devLbl}</h2>
+<div class="stats">
+  <div class="stat-box" style="border-color:#39ff7a;">
+    <div class="val" style="color:#1a7a3a;">${mbr24}</div>
+    <div class="lbl">24 Mbps (>= ${thr[24]} dBm)</div>
+  </div>
+  <div class="stat-box" style="border-color:#f5a623;">
+    <div class="val" style="color:#b07000;">${mbr12}</div>
+    <div class="lbl">12 Mbps (>= ${thr[12]} dBm)</div>
+  </div>
+  <div class="stat-box" style="border-color:#ff7800;">
+    <div class="val" style="color:#a04000;">${mbr6}</div>
+    <div class="lbl">6 Mbps (>= ${thr[6]} dBm)</div>
+  </div>
+  <div class="stat-box" style="border-color:#ff4545;">
+    <div class="val" style="color:#a00000;">${mbrNone}</div>
+    <div class="lbl">Below threshold</div>
+  </div>
+  <div class="stat-box">
+    <div class="val">${Math.round(mbr24/surveyPoints.length*100)}%</div>
+    <div class="lbl">High density ready</div>
+  </div>
+</div>
+
+<div class="map-wrap"><img src="${mapDataUrl}"></div>
+
+<div class="legend">
+  <span>-90 dBm</span><div class="legend-bar"></div><span>-30 dBm</span>
+  &nbsp;&nbsp; <span style="color:#f5a623;">- - -  Threshold: ${thresholdDbm} dBm</span>
+</div>
+
+<table>
+  <tr><th>#</th><th>SSID</th><th>RSSI</th><th>MBR (${devLbl})</th><th>X %</th><th>Y %</th><th>Time</th></tr>
+  ${surveyPoints.map((p,i)=>{
+    const mbr = rssiToMbr(p.rssi);
+    const mbrColor = mbr>=24?'#1a7a3a':mbr>=12?'#b07000':mbr>=6?'#a04000':'#a00000';
+    return `<tr>
+      <td>${i+1}</td><td>${p.ssid}</td>
+      <td style="color:${p.rssi>=thr[24]?'#1a7a3a':p.rssi>=thr[12]?'#b07000':'#a00000'};font-weight:600;">${p.rssi} dBm</td>
+      <td style="color:${mbrColor};font-weight:600;">${mbr>0?mbr+' Mbps':'< 6 Mbps'}</td>
+      <td>${(p.x*100).toFixed(1)}%</td><td>${(p.y*100).toFixed(1)}%</td>
+      <td>${new Date(p.ts).toLocaleTimeString()}</td>
+    </tr>`;
+  }).join('')}
+</table>
+
+${notes ? `<div class="notes-box">${notes}</div>` : ''}
+
+<div class="footer">Generated by RF·DIAG &mdash; ${date}</div>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 800);
+  closePdfModal();
+}
+
+// ── Heatmap mode + Device mode ───────────────────────────
+let heatmapMode = 'rssi';   // 'rssi' | 'mbr'
+let deviceMode  = 'laptop'; // 'laptop' | 'phone'
+
+// MBR thresholds per device (dBm)
+const MBR_THRESHOLDS = {
+  laptop: { 24: -65, 12: -75, 6: -82 },
+  phone:  { 24: -60, 12: -70, 6: -77 },  // 5 dB tighter for smartphones
+};
+
+function setHeatmapMode(mode) {
+  heatmapMode = mode;
+  document.getElementById('mode-rssi').classList.toggle('active', mode === 'rssi');
+  document.getElementById('mode-mbr').classList.toggle('active',  mode === 'mbr');
+  updateLegend();
+  drawHeatmap();
+}
+
+function setDeviceMode(mode) {
+  deviceMode = mode;
+  document.getElementById('dev-laptop').classList.toggle('active', mode === 'laptop');
+  document.getElementById('dev-phone').classList.toggle('active',  mode === 'phone');
+  updateLegend();
+  drawHeatmap();
+  drawThreshold();
+}
+
+function rssiToMbr(rssi) {
+  const thr = MBR_THRESHOLDS[deviceMode];
+  if (rssi >= thr[24]) return 24;
+  if (rssi >= thr[12]) return 12;
+  if (rssi >= thr[6])  return 6;
+  return 0;
+}
+
+function mbrToColor(rssi, alpha) {
+  const mbr = rssiToMbr(rssi);
+  const a = Math.round(alpha * 255);
+  if (mbr === 24) return [57, 255, 122, a];    // green
+  if (mbr === 12) return [245, 166, 35, a];    // amber
+  if (mbr === 6)  return [255, 120, 0, a];     // orange
+  return [255, 69, 69, a];                      // red — below threshold
+}
+
+function updateLegend() {
+  const bar   = document.getElementById('legend-bar');
+  const left  = document.getElementById('legend-left');
+  const right = document.getElementById('legend-right');
+  const thr   = MBR_THRESHOLDS[deviceMode];
+  const devLabel = deviceMode === 'phone' ? ' (Phone)' : ' (Laptop)';
+
+  if (heatmapMode === 'rssi') {
+    bar.style.background  = 'linear-gradient(to right,#ff4545,#f5a623,#39ff7a)';
+    bar.title = '';
+    left.textContent  = '-90';
+    right.textContent = '-30 dBm';
+  } else {
+    bar.style.background = `linear-gradient(to right,#ff4545 0%,#ff4545 25%,#ff7800 25%,#ff7800 45%,#f5a623 45%,#f5a623 65%,#39ff7a 65%,#39ff7a 100%)`;
+    bar.title = `MBR zones${devLabel}`;
+    left.textContent  = `< 6 Mbps`;
+    right.textContent = `24 Mbps${devLabel}`;
+  }
+}
+let calibMode    = false;
+let calibPtA     = null;   // {x, y} normalised
+let calibPtB     = null;
+let calibScale   = null;   // pixels per metre (or null if not set)
+let calibUnit    = 'm';
+let calibRealDist = null;
+
+const calibCanvas = () => document.getElementById('calib-canvas');
+
+function toggleCalibMode() {
+  if (!planLoaded) { alert('Load a floor plan first.'); return; }
+  calibMode = !calibMode;
+  calibPtA = null; calibPtB = null;
+
+  const btn = document.getElementById('calib-btn');
+  const status = document.getElementById('calib-status');
+
+  btn.classList.toggle('active', calibMode);
+  status.style.display = calibMode ? 'flex' : 'none';
+  document.getElementById('survey-canvas-wrap').style.cursor = calibMode ? 'crosshair' : 'crosshair';
+
+  if (calibMode) {
+    document.getElementById('calib-hint').textContent = 'Click point A on the plan';
+  }
+  drawCalib();
+}
+
+function cancelCalib() {
+  calibMode = false; calibPtA = null; calibPtB = null;
+  document.getElementById('calib-btn').classList.remove('active');
+  document.getElementById('calib-status').style.display = 'none';
+  document.getElementById('calib-modal').classList.remove('open');
+  drawCalib();
+}
+
+function confirmCalib() {
+  const dist = parseFloat(document.getElementById('calib-dist-val').value);
+  calibUnit = document.getElementById('calib-dist-unit').value;
+  if (!dist || dist <= 0) { alert('Enter a valid distance.'); return; }
+
+  const canvas = calibCanvas();
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  const dx = (calibPtB.x - calibPtA.x) * W;
+  const dy = (calibPtB.y - calibPtA.y) * H;
+  const pixelDist = Math.sqrt(dx*dx + dy*dy);
+
+  // Convert to metres internally
+  calibRealDist = calibUnit === 'ft' ? dist * 0.3048 : dist;
+  calibScale    = pixelDist / calibRealDist;  // px per metre
+
+  const label = calibUnit === 'ft'
+    ? `Scale: ${dist} ft = ${pixelDist.toFixed(0)} px`
+    : `Scale: ${dist} m = ${pixelDist.toFixed(0)} px`;
+  document.getElementById('calib-scale-display').textContent = label;
+
+  document.getElementById('calib-modal').classList.remove('open');
+  calibMode = false; calibPtA = null; calibPtB = null;
+  document.getElementById('calib-btn').classList.remove('active');
+  document.getElementById('calib-status').style.display = 'flex';
+  document.getElementById('calib-hint').textContent = '✓ Scale set';
+
+  drawCalib();
+  renderPointsList();  // refresh to show real distances
+}
+
+function handleCalibClick(x, y) {
+  if (!calibPtA) {
+    calibPtA = {x, y};
+    document.getElementById('calib-hint').textContent = 'Click point B on the plan';
+  } else if (!calibPtB) {
+    calibPtB = {x, y};
+    document.getElementById('calib-hint').textContent = 'Setting distance...';
+    drawCalib();
+    document.getElementById('calib-modal').classList.add('open');
+  }
+  drawCalib();
+}
+
+function drawCalib() {
+  const canvas = calibCanvas();
+  const ctx = canvas.getContext('2d');
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+  if (!calibPtA && !calibPtB) return;
+
+  ctx.strokeStyle = '#f5a623';
+  ctx.fillStyle   = '#f5a623';
+  ctx.lineWidth   = 2;
+  ctx.setLineDash([6, 3]);
+
+  const ax = calibPtA ? calibPtA.x * W : null;
+  const ay = calibPtA ? calibPtA.y * H : null;
+  const bx = calibPtB ? calibPtB.x * W : null;
+  const by = calibPtB ? calibPtB.y * H : null;
+
+  // Draw line if both points
+  if (ax !== null && bx !== null) {
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Draw points
+  [[ax, ay, 'A'], [bx, by, 'B']].forEach(([x, y, lbl]) => {
+    if (x === null) return;
+    ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI*2);
+    ctx.fillStyle = '#f5a623'; ctx.fill();
+    ctx.font = 'bold 11px IBM Plex Mono, monospace';
+    ctx.fillStyle = '#000'; ctx.textAlign = 'center';
+    ctx.fillText(lbl, x, y+4);
+  });
+
+  // If scale is set, draw scale bar at bottom
+  if (calibScale) {
+    const barM = 5;  // show 5m bar
+    const barPx = barM * calibScale;
+    const bx0 = 14, by0 = H - 14;
+    ctx.strokeStyle = '#f5a623'; ctx.lineWidth = 3; ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(bx0, by0); ctx.lineTo(bx0 + barPx, by0);
+    ctx.moveTo(bx0, by0-5); ctx.lineTo(bx0, by0+5);
+    ctx.moveTo(bx0+barPx, by0-5); ctx.lineTo(bx0+barPx, by0+5);
+    ctx.stroke();
+    const label = calibUnit === 'ft' ? `${(barM*3.28084).toFixed(0)} ft` : `${barM} m`;
+    ctx.fillStyle = '#f5a623'; ctx.font = 'bold 9px IBM Plex Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, bx0 + barPx/2, by0 - 8);
+  }
+}
+
+function pixelsToReal(px, py, px2, py2) {
+  if (!calibScale) return null;
+  const canvas = calibCanvas();
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  const dx = (px2 - px) * W, dy = (py2 - py) * H;
+  const metres = Math.sqrt(dx*dx + dy*dy) / calibScale;
+  if (calibUnit === 'ft') return `${(metres * 3.28084).toFixed(1)} ft`;
+  return `${metres.toFixed(1)} m`;
+}
+
+window.addEventListener('resize', () => { if (surveyOpen) { resizeCanvases(); drawCalib(); } });
+window.addEventListener('keydown', e => { if (e.key === 'Escape' && surveyOpen) toggleSurvey(); });
+</script>
+</body>
+</html>
