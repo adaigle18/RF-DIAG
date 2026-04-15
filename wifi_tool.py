@@ -57,7 +57,7 @@ app = Flask(__name__, template_folder=_templates_dir)
 # ---------------------------------------------------------------------------
 # ★ CONFIGURATION
 # ---------------------------------------------------------------------------
-WLANPI_SCAN_IFACE = "wlan1"   # WLANPi: wlan0=single adapter, wlan1/wlan2=multi
+WLANPI_SCAN_IFACE = "wlan0"   # WLANPi: wlan0=single adapter, wlan1/wlan2=multi
 
 # Windows only: specify which Wi-Fi adapter netsh should use for scanning.
 # Set to None to use Windows default, or e.g. "Wi-Fi 3" for a specific adapter.
@@ -338,7 +338,7 @@ def main():
     print(f"Platform: {sys.platform}")
     print(f"WLANPi scan interface: {WLANPI_SCAN_IFACE}")
     print("Running initial scan...")
-    time.sleep(3)
+    time.sleep(10)
     refresh_cache()
 
     n   = len(_cache["networks"])

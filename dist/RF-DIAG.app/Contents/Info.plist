@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>RF-DIAG</string>
+	<key>CFBundleExecutable</key>
+	<string>RF-DIAG</string>
+	<key>CFBundleIconFile</key>
+	<string>icon-windowed.icns</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.rfdiag.wifi</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>RF-DIAG</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>9.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>9.0.0</string>
+	<key>LSBackgroundOnly</key>
+	<false/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>RF-DIAG needs Location Services access to read Wi-Fi network names (SSIDs) on macOS 14 and later.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>RF-DIAG needs Location Services access to read Wi-Fi network names (SSIDs) on macOS 14 and later.</string>
+	<key>NSRequiresAquaSystemAppearance</key>
+	<false/>
+</dict>
+</plist>

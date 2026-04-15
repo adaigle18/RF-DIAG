@@ -338,19 +338,19 @@ def _parse_iw_scan_output(raw: str) -> list[dict]:
 
 class WLANPiSSH:
     """
-    Persistent SSH connection to WLANPi over USB/RNDIS (169.254.42.1).
+    Persistent SSH connection to WLANPi over USB/RNDIS (198.18.42.1).
     Uses Paramiko so it works identically on macOS and Windows.
     Thread-safe: a single connection is reused across Flask threads.
     """
 
     def __init__(
         self,
-        host: str = "169.254.42.1",
+        host: str = "198.18.42.1",
         user: str = "wlanpi",
         key_path: str = None,
         password: str = None,
-        connect_timeout: int = 5,
-        exec_timeout: int = 10,
+        connect_timeout: int = 15,
+        exec_timeout: int = 30,
     ):
         self.host = host
         self.user = user
@@ -392,20 +392,42 @@ class WLANPiSSH:
             hostname=self.host,
             username=self.user,
             timeout=self.connect_timeout,
+            banner_timeout=30,
+            auth_timeout=30,
         )
 
         import os
         if self.key_path and os.path.exists(self.key_path):
             kwargs["key_filename"] = self.key_path
+            kwargs["look_for_keys"] = False
+            kwargs["allow_agent"] = False
         elif self.password:
             kwargs["password"] = self.password
         else:
             # Fall back to SSH agent / default keys
             pass
 
+        import socket as _socket
+        _sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+        _sock.settimeout(self.connect_timeout)
+        _sock.bind((self._local_ip(), 0))
+        _sock.connect((self.host, 22))
+        kwargs["sock"] = _sock
         client.connect(**kwargs)
         return client
 
+
+    def _local_ip(self) -> str:
+        """Find the local IP that routes to the WLANPi."""
+        import socket as _s
+        try:
+            tmp = _s.socket(_s.AF_INET, _s.SOCK_DGRAM)
+            tmp.connect((self.host, 22))
+            ip = tmp.getsockname()[0]
+            tmp.close()
+            return ip
+        except Exception:
+            return "0.0.0.0"
     def _is_alive(self) -> bool:
         if self._client is None:
             return False
@@ -426,7 +448,7 @@ class WLANPiSSH:
         import socket
         reachable = False
         try:
-            with socket.create_connection((self.host, 22), timeout=2):
+            with socket.create_connection((self.host, 22), timeout=10):
                 reachable = True
         except (OSError, socket.timeout):
             pass
@@ -591,6 +613,7 @@ class WLANPiSSH:
         """
         try:
             # Trigger a fresh scan
+            self.run(f"sudo /sbin/ip link set {interface} up 2>/dev/null || true")
             self.run(f"sudo /usr/sbin/iw dev {interface} scan trigger 2>/dev/null || true")
             time.sleep(3)
             raw, err = self.run(f"sudo /usr/sbin/iw dev {interface} scan dump")
@@ -1002,7 +1025,7 @@ class ScanCache:
 #: Shared WLANPi SSH connection
 import os as _os
 wlanpi = WLANPiSSH(
-    host="169.254.42.1",
+    host="198.18.42.1",
     user="wlanpi",
     key_path=_os.path.expanduser("~/.ssh/id_ed25519"),
 )
