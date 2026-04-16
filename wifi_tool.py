@@ -255,6 +255,7 @@ def _do_refresh_cache():
 
 
 def background_refresher():
+    time.sleep(15)  # Wait for prober to trigger initial scan
     while True:
         try:
             refresh_cache()
@@ -337,17 +338,18 @@ def main():
 
     print(f"Platform: {sys.platform}")
     print(f"WLANPi scan interface: {WLANPI_SCAN_IFACE}")
-    print("Running initial scan...")
-    time.sleep(10)
-    refresh_cache()
+
+    # Start prober first — it will trigger initial scan when WLANPi detected
+    threading.Thread(target=wlanpi_prober, daemon=True).start()
+    threading.Thread(target=background_refresher, daemon=True).start()
+
+    print("Waiting for WLANPi detection...")
+    time.sleep(12)
 
     n   = len(_cache["networks"])
     src = _cache["scan_source"]
     print(f"Found {n} networks via {src}.")
     print("WLANPi: not connected / unavailable" if not wlanpi.available else f"WLANPi OK [{WLANPI_SCAN_IFACE}]")
-
-    threading.Thread(target=background_refresher, daemon=True).start()
-    threading.Thread(target=wlanpi_prober, daemon=True).start()
     app.run(host="0.0.0.0", debug=False, port=5001)
 
 
