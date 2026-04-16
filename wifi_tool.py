@@ -74,6 +74,7 @@ FREQ_6GHZ_MIN = 5925
 
 def scan_wlanpi_full() -> list[dict]:
     try:
+        wlanpi.run(f"sudo /sbin/ip link set {WLANPI_SCAN_IFACE} up 2>/dev/null || true")
         output, _ = wlanpi.run(f"sudo iw dev {WLANPI_SCAN_IFACE} scan 2>/dev/null")
     except RuntimeError as e:
         print(f"[WLANPi] {e}")
@@ -96,7 +97,6 @@ def scan_wlanpi_full() -> list[dict]:
                 "bssid": m.group(1).lower(), "ssid": "",
                 "rssi": -100, "channel": 1, "_freq": 0,
                 "ap_tx_dbm": None, "ch_util_pct": None, "station_count": None,
-                "ap_basic_rates": [], "ap_all_rates": [], "ap_min_basic_rate": None,
             }
             in_bss_load = False
             continue
@@ -147,31 +147,6 @@ def scan_wlanpi_full() -> list[dict]:
                     current["ap_tx_dbm"] = val
                 in_bss_load = False
                 break
-
-        m = re.match(r"Supported rates:\s*(.+)", s, re.IGNORECASE)
-        if m:
-            raw = m.group(1).split()
-            basic = [float(r.rstrip('*')) for r in raw if r.endswith('*')]
-            all_r = [float(r.rstrip('*')) for r in raw]
-            current["ap_basic_rates"] = basic
-            current["ap_all_rates"]   = all_r
-            if basic:
-                current["ap_min_basic_rate"] = min(basic)
-            in_bss_load = False
-            continue
-
-        m = re.match(r"Extended supported rates:\s*(.+)", s, re.IGNORECASE)
-        if m:
-            raw = m.group(1).split()
-            for r in raw:
-                val = float(r.rstrip('*'))
-                current["ap_all_rates"].append(val)
-                if r.endswith('*'):
-                    current["ap_basic_rates"].append(val)
-            if current["ap_basic_rates"]:
-                current["ap_min_basic_rate"] = min(current["ap_basic_rates"])
-            in_bss_load = False
-            continue
 
         if re.match(r"BSS Load:", s, re.IGNORECASE):
             in_bss_load = True
@@ -240,14 +215,11 @@ def _do_refresh_cache():
                 "bssid":         (n.get("bssid") or "").lower(),
                 "rssi":          int(n.get("rssi") or -100),
                 "channel":       int(n.get("channel") or 1),
-                "freq_mhz":           n.get("freq_mhz"),
-                "band":               n.get("band"),
-                "ap_tx_dbm":          None,
-                "ch_util_pct":        n.get("ch_util_pct"),
-                "station_count":      n.get("station_count"),
-                "ap_basic_rates":     [],
-                "ap_all_rates":       [],
-                "ap_min_basic_rate":  None,
+                "freq_mhz":      n.get("freq_mhz"),   # preserve for 6 GHz detection
+                "band":          n.get("band"),        # preserve corrected band
+                "ap_tx_dbm":     None,
+                "ch_util_pct":   n.get("ch_util_pct"),
+                "station_count": n.get("station_count"),
             }
             for n in snapshot["networks"]
             if n.get("ssid") and n.get("bssid")
@@ -263,10 +235,7 @@ def _do_refresh_cache():
     for n in raw:
         try:
             data = analyse_network(n, active_mbr_mbps=None,
-                                   ap_tx_dbm=n.get("ap_tx_dbm"),
-                                   ap_min_basic_rate=n.get("ap_min_basic_rate"),
-                                   ap_basic_rates=n.get("ap_basic_rates", []),
-                                   ap_all_rates=n.get("ap_all_rates", []))
+                                   ap_tx_dbm=n.get("ap_tx_dbm"))
             data["seen_by_wlanpi"] = wlanpi_ok
             data["ch_util_pct"]    = n.get("ch_util_pct")
             data["station_count"]  = n.get("station_count")
@@ -287,7 +256,6 @@ def _do_refresh_cache():
 
 
 def background_refresher():
-    time.sleep(15)  # Wait for prober to trigger initial scan
     while True:
         try:
             refresh_cache()
@@ -370,18 +338,18 @@ def main():
 
     print(f"Platform: {sys.platform}")
     print(f"WLANPi scan interface: {WLANPI_SCAN_IFACE}")
-
-    # Start prober first — it will trigger initial scan when WLANPi detected
-    threading.Thread(target=wlanpi_prober, daemon=True).start()
-    threading.Thread(target=background_refresher, daemon=True).start()
-
-    print("Waiting for WLANPi detection...")
-    time.sleep(12)
+    print("Running initial scan...")
+    time.sleep(10)
+    wlanpi.probe()  # Ensure WLANPi is detected before first scan
+    refresh_cache()
 
     n   = len(_cache["networks"])
     src = _cache["scan_source"]
     print(f"Found {n} networks via {src}.")
     print("WLANPi: not connected / unavailable" if not wlanpi.available else f"WLANPi OK [{WLANPI_SCAN_IFACE}]")
+
+    threading.Thread(target=background_refresher, daemon=True).start()
+    threading.Thread(target=wlanpi_prober, daemon=True).start()
     app.run(host="0.0.0.0", debug=False, port=5001)
 
 
