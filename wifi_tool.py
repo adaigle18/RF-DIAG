@@ -96,6 +96,7 @@ def scan_wlanpi_full() -> list[dict]:
                 "bssid": m.group(1).lower(), "ssid": "",
                 "rssi": -100, "channel": 1, "_freq": 0,
                 "ap_tx_dbm": None, "ch_util_pct": None, "station_count": None,
+                "ap_basic_rates": [], "ap_all_rates": [], "ap_min_basic_rate": None,
             }
             in_bss_load = False
             continue
@@ -146,6 +147,31 @@ def scan_wlanpi_full() -> list[dict]:
                     current["ap_tx_dbm"] = val
                 in_bss_load = False
                 break
+
+        m = re.match(r"Supported rates:\s*(.+)", s, re.IGNORECASE)
+        if m:
+            raw = m.group(1).split()
+            basic = [float(r.rstrip('*')) for r in raw if r.endswith('*')]
+            all_r = [float(r.rstrip('*')) for r in raw]
+            current["ap_basic_rates"] = basic
+            current["ap_all_rates"]   = all_r
+            if basic:
+                current["ap_min_basic_rate"] = min(basic)
+            in_bss_load = False
+            continue
+
+        m = re.match(r"Extended supported rates:\s*(.+)", s, re.IGNORECASE)
+        if m:
+            raw = m.group(1).split()
+            for r in raw:
+                val = float(r.rstrip('*'))
+                current["ap_all_rates"].append(val)
+                if r.endswith('*'):
+                    current["ap_basic_rates"].append(val)
+            if current["ap_basic_rates"]:
+                current["ap_min_basic_rate"] = min(current["ap_basic_rates"])
+            in_bss_load = False
+            continue
 
         if re.match(r"BSS Load:", s, re.IGNORECASE):
             in_bss_load = True
@@ -214,11 +240,14 @@ def _do_refresh_cache():
                 "bssid":         (n.get("bssid") or "").lower(),
                 "rssi":          int(n.get("rssi") or -100),
                 "channel":       int(n.get("channel") or 1),
-                "freq_mhz":      n.get("freq_mhz"),   # preserve for 6 GHz detection
-                "band":          n.get("band"),        # preserve corrected band
-                "ap_tx_dbm":     None,
-                "ch_util_pct":   n.get("ch_util_pct"),
-                "station_count": n.get("station_count"),
+                "freq_mhz":           n.get("freq_mhz"),
+                "band":               n.get("band"),
+                "ap_tx_dbm":          None,
+                "ch_util_pct":        n.get("ch_util_pct"),
+                "station_count":      n.get("station_count"),
+                "ap_basic_rates":     [],
+                "ap_all_rates":       [],
+                "ap_min_basic_rate":  None,
             }
             for n in snapshot["networks"]
             if n.get("ssid") and n.get("bssid")
@@ -234,7 +263,10 @@ def _do_refresh_cache():
     for n in raw:
         try:
             data = analyse_network(n, active_mbr_mbps=None,
-                                   ap_tx_dbm=n.get("ap_tx_dbm"))
+                                   ap_tx_dbm=n.get("ap_tx_dbm"),
+                                   ap_min_basic_rate=n.get("ap_min_basic_rate"),
+                                   ap_basic_rates=n.get("ap_basic_rates", []),
+                                   ap_all_rates=n.get("ap_all_rates", []))
             data["seen_by_wlanpi"] = wlanpi_ok
             data["ch_util_pct"]    = n.get("ch_util_pct")
             data["station_count"]  = n.get("station_count")
