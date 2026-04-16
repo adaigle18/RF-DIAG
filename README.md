@@ -86,6 +86,16 @@ RF·DIAG will SSH into it and run `iw dev wlan1 scan` to obtain:
 - Full QBSS channel utilisation
 - Station counts
 - AP TX power (TPC / Country IE)
+- Min Basic Rate and full rate set per AP
+
+> **Best results with two Wi-Fi adapters on the WLANPi.**  
+> With a dual-adapter setup, one adapter scans (wlan1) while the other stays connected (wlan0), giving you uninterrupted passive scan data without dropping the management link.  
+> Single-adapter WLANPi works but may miss networks during the scan trigger window.
+
+Without a WLANPi, RF·DIAG falls back to:
+- **MBR** — estimated from RSSI thresholds (not the actual AP-advertised rate)
+- **TX Power** — defaulted to 20 dBm (affects distance calculation accuracy)
+- **Basic rates** — not available (requires `iw scan` output)
 
 Edit `wifi_tool.py` to change the scan interface:
 
@@ -137,6 +147,12 @@ To use a specific Wi-Fi adapter, set in `wifi_tool.py`:
 ```python
 NETSH_INTERFACE = "Wi-Fi 3"   # or None for default
 ```
+
+---
+
+## Documentation
+
+- [macOS Installation Guide (PDF)](docs/RFDIAG_macOS_Installation_Guide.pdf) — step-by-step setup including Location Services, PyInstaller build, and WLANPi connection
 
 ---
 
