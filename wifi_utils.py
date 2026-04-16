@@ -345,13 +345,29 @@ class WLANPiSSH:
 
     def __init__(
         self,
-        host: str = "198.18.42.1",
+        host: str = None,
         user: str = "wlanpi",
         key_path: str = None,
         password: str = None,
         connect_timeout: int = 15,
         exec_timeout: int = 30,
     ):
+        # Auto-detect WLANPi IP if not specified
+        if host is None:
+            import socket as _s
+            for _ip in ["169.254.42.1", "198.18.42.1"]:
+                try:
+                    s = _s.socket(_s.AF_INET, _s.SOCK_STREAM)
+                    s.settimeout(2)
+                    s.connect((_ip, 22))
+                    s.close()
+                    host = _ip
+                    print(f"[WLANPi] Auto-detected host: {host}")
+                    break
+                except Exception:
+                    pass
+            if host is None:
+                host = "169.254.42.1"  # default fallback
         self.host = host
         self.user = user
         self.password = password
@@ -1025,7 +1041,7 @@ class ScanCache:
 #: Shared WLANPi SSH connection
 import os as _os
 wlanpi = WLANPiSSH(
-    host="198.18.42.1",
+    host=None,  # Auto-detect: tries 169.254.42.1 then 198.18.42.1
     user="wlanpi",
     key_path=_os.path.expanduser("~/.ssh/id_ed25519"),
 )

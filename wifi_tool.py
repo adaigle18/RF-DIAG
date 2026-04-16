@@ -57,7 +57,20 @@ app = Flask(__name__, template_folder=_templates_dir)
 # ---------------------------------------------------------------------------
 # ★ CONFIGURATION
 # ---------------------------------------------------------------------------
-WLANPI_SCAN_IFACE = "wlan0"   # WLANPi: wlan0=single adapter, wlan1/wlan2=multi
+# Auto-detect WLANPi scan interface
+def _detect_wlanpi_iface():
+    for iface in ["wlan1", "wlan0", "wlan2"]:
+        try:
+            out, _ = wlanpi.run(f"iw dev {iface} info 2>/dev/null")
+            if iface in out:
+                print(f"[WLANPi] Auto-detected interface: {iface}")
+                return iface
+        except Exception:
+            pass
+    print("[WLANPi] Could not auto-detect interface, defaulting to wlan1")
+    return "wlan1"
+
+WLANPI_SCAN_IFACE = None  # Auto-detected at scan time
 
 # Windows only: specify which Wi-Fi adapter netsh should use for scanning.
 # Set to None to use Windows default, or e.g. "Wi-Fi 3" for a specific adapter.
@@ -73,9 +86,23 @@ FREQ_6GHZ_MIN = 5925
 # ---------------------------------------------------------------------------
 
 def scan_wlanpi_full() -> list[dict]:
+    # Try interfaces in order until one returns results
+    global WLANPI_SCAN_IFACE
+    output = ""
+    for _iface in ([WLANPI_SCAN_IFACE] if WLANPI_SCAN_IFACE else ["wlan1", "wlan0", "wlan2"]):
+        try:
+            wlanpi.run(f"sudo /sbin/ip link set {_iface} up 2>/dev/null || true")
+            _out, _ = wlanpi.run(f"sudo iw dev {_iface} scan 2>/dev/null")
+            if _out.strip():
+                output = _out
+                if WLANPI_SCAN_IFACE != _iface:
+                    WLANPI_SCAN_IFACE = _iface
+                    print(f"[WLANPi] Auto-detected interface: {_iface}")
+                break
+        except Exception:
+            pass
     try:
-        wlanpi.run(f"sudo /sbin/ip link set {WLANPI_SCAN_IFACE} up 2>/dev/null || true")
-        output, _ = wlanpi.run(f"sudo iw dev {WLANPI_SCAN_IFACE} scan 2>/dev/null")
+        pass
     except RuntimeError as e:
         print(f"[WLANPi] {e}")
         return []
