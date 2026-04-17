@@ -116,6 +116,74 @@ def mbr_status(rssi_dbm, active_mbr_mbps=None):
     }
 
 
+
+def basic_rate_optimization(ap_min_basic_rate=None, ap_basic_rates=None, ap_all_rates=None):
+    """
+    Analyse the AP's advertised minimum basic rate and return an optimization
+    recommendation. Basic rates are the rates used for management frames (beacons,
+    probe responses, etc.). Lower basic rates waste more airtime.
+
+    Best practice: set minimum basic rate to 12 Mbps (disables 1/2/5.5/11 Mbps CCK).
+    All 802.11g/n/ac/ax devices support 12 Mbps.
+    """
+    rates  = ap_basic_rates or []
+    all_r  = ap_all_rates   or []
+
+    if ap_min_basic_rate is None:
+        return {
+            "min_basic_rate":   None,
+            "basic_rates":      rates,
+            "all_rates":        all_r,
+            "severity":         "unknown",
+            "label":            "N/A",
+            "advice":           "Basic rates not available — connect WLANPi for iw scan data.",
+            "recommended_min":  12,
+            "needs_change":     False,
+        }
+
+    r = float(ap_min_basic_rate)
+
+    if r <= 2:
+        sev   = "danger"
+        needs = True
+        advice = (f"Min basic rate = {r} Mbps (CCK legacy). "
+                  "Beacons & management frames sent at 1-2 Mbps waste significant airtime. "
+                  "Raise to 12 Mbps — all 802.11g/n/ac/ax clients support it. "
+                  "Expected gain: 30-50% more usable airtime.")
+    elif r <= 5.5:
+        sev   = "danger"
+        needs = True
+        advice = (f"Min basic rate = {r} Mbps (CCK). "
+                  "CCK rates still active — management frames are slow. "
+                  "Raise to 12 Mbps to disable CCK and free airtime.")
+    elif r < 12:
+        sev   = "warn"
+        needs = True
+        advice = (f"Min basic rate = {r} Mbps (OFDM but suboptimal). "
+                  "Raising to 12 Mbps reduces management overhead further.")
+    elif r < 24:
+        sev   = "good"
+        needs = False
+        advice = (f"Min basic rate = {r} Mbps — good. "
+                  "Management frames are airtime-efficient. "
+                  "Consider 24 Mbps for dense or enterprise environments.")
+    else:
+        sev   = "good"
+        needs = False
+        advice = (f"Min basic rate = {r} Mbps — optimal. "
+                  "Minimum overhead for management frames.")
+
+    return {
+        "min_basic_rate":  r,
+        "basic_rates":     sorted(rates),
+        "all_rates":       sorted(all_r),
+        "severity":        sev,
+        "label":           f"{r} Mbps",
+        "advice":          advice,
+        "recommended_min": 12 if needs else None,
+        "needs_change":    needs,
+    }
+
 def power_recommendation(rssi_dbm, channel, ap_tx_dbm=None):
     tx_str = f"{ap_tx_dbm} dBm" if ap_tx_dbm is not None else "unknown"
     if rssi_dbm > CCI_CAUTION_RSSI:
@@ -139,7 +207,8 @@ def power_recommendation(rssi_dbm, channel, ap_tx_dbm=None):
             "rssi": rssi_dbm, "ap_tx_dbm": ap_tx_dbm, "suggested_tx": None}
 
 
-def analyse_network(n: dict, active_mbr_mbps=None, ap_tx_dbm=None) -> dict:
+def analyse_network(n: dict, active_mbr_mbps=None, ap_tx_dbm=None,
+                    ap_min_basic_rate=None, ap_basic_rates=None, ap_all_rates=None) -> dict:
     """Run all RF diagnostics on a single network dict."""
     rssi    = n["rssi"]
     channel = n["channel"]
@@ -147,6 +216,11 @@ def analyse_network(n: dict, active_mbr_mbps=None, ap_tx_dbm=None) -> dict:
     freq    = n.get("freq_mhz") or channel_to_frequency_mhz(channel)
     dist    = estimate_distance(rssi, frequency_mhz=freq)
     tx      = ap_tx_dbm if ap_tx_dbm is not None else n.get("ap_tx_dbm")
+
+    min_br  = ap_min_basic_rate if ap_min_basic_rate is not None else n.get("ap_min_basic_rate")
+    br_list = ap_basic_rates    if ap_basic_rates    is not None else n.get("ap_basic_rates", [])
+    all_r   = ap_all_rates      if ap_all_rates      is not None else n.get("ap_all_rates", [])
+
     return {
         **n,
         "distance_m":     dist,
@@ -159,6 +233,7 @@ def analyse_network(n: dict, active_mbr_mbps=None, ap_tx_dbm=None) -> dict:
         "frequency_mhz":  freq,
         "mbr":            mbr_status(rssi, active_mbr_mbps=active_mbr_mbps),
         "power":          power_recommendation(rssi, channel, ap_tx_dbm=tx),
+        "basic_rate_opt": basic_rate_optimization(min_br, br_list, all_r),
     }
 
 
