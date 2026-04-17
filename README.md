@@ -80,13 +80,35 @@ If missing: launch the `.app` once — the permission request registers the app 
 
 ## WLANPi Integration
 
-Connect a [WLANPi](https://www.wlanpi.com) via USB (RNDIS / 169.254.42.1).  
-RF·DIAG will SSH into it and run `iw dev wlan1 scan` to obtain:
+Connect a [WLANPi](https://www.wlanpi.com) via USB (RNDIS).  
+RF·DIAG will SSH into it and run `iw dev scan` to obtain:
 
 - Full QBSS channel utilisation
 - Station counts
 - AP TX power (TPC / Country IE)
 - Min Basic Rate and full rate set per AP
+
+**When WLANPi is connected, it takes full priority — the native CoreWLAN/netsh scan is paused automatically.**  
+If the WLANPi disconnects, RF·DIAG falls back to the native scan with no intervention required.
+
+### Auto-detection
+
+RF·DIAG automatically detects:
+- **IP address** — tries `169.254.42.1` first, then `198.18.42.1`
+- **Scan interface** — tries `wlan1`, `wlan0`, `wlan2` in order
+
+No manual configuration needed for standard WLANPi setups.
+
+### SSH Key Setup (one-time)
+
+RF·DIAG connects via SSH using `~/.ssh/id_ed25519`.  
+Copy your key to the WLANPi once:
+
+```bash
+ssh-copy-id -i ~/.ssh/id_ed25519.pub wlanpi@169.254.42.1
+```
+
+After this, RF·DIAG connects automatically without a password prompt.
 
 > **Best results with two Wi-Fi adapters on the WLANPi.**  
 > With a dual-adapter setup, one adapter scans (wlan1) while the other stays connected (wlan0), giving you uninterrupted passive scan data without dropping the management link.  
@@ -96,14 +118,6 @@ Without a WLANPi, RF·DIAG falls back to:
 - **MBR** — estimated from RSSI thresholds (not the actual AP-advertised rate)
 - **TX Power** — defaulted to 20 dBm (affects distance calculation accuracy)
 - **Basic rates** — not available (requires `iw scan` output)
-
-Edit `wifi_tool.py` to change the scan interface:
-
-```python
-WLANPI_SCAN_IFACE = "wlan1"   # or wlan0, wlan2
-```
-
-SSH key used: `~/.ssh/id_ed25519`
 
 ---
 

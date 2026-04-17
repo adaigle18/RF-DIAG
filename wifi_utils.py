@@ -20,7 +20,7 @@ PLATFORM = sys.platform  # "darwin" | "win32" | "linux"
 # ---------------------------------------------------------------------------
 # Version banner
 # ---------------------------------------------------------------------------
-VERSION = "3.0"
+VERSION = "3.1"
 
 
 # ===========================================================================
@@ -116,11 +116,12 @@ def mbr_status(rssi_dbm, active_mbr_mbps=None):
     }
 
 
+
 def basic_rate_optimization(ap_min_basic_rate=None, ap_basic_rates=None, ap_all_rates=None):
     """
     Analyse the AP's advertised minimum basic rate and return an optimization
-    recommendation.  Basic rates are the rates used for management frames (beacons,
-    probe responses, etc.).  Lower basic rates waste more airtime.
+    recommendation. Basic rates are the rates used for management frames (beacons,
+    probe responses, etc.). Lower basic rates waste more airtime.
 
     Best practice: set minimum basic rate to 12 Mbps (disables 1/2/5.5/11 Mbps CCK).
     All 802.11g/n/ac/ax devices support 12 Mbps.
@@ -183,7 +184,6 @@ def basic_rate_optimization(ap_min_basic_rate=None, ap_basic_rates=None, ap_all_
         "needs_change":    needs,
     }
 
-
 def power_recommendation(rssi_dbm, channel, ap_tx_dbm=None):
     tx_str = f"{ap_tx_dbm} dBm" if ap_tx_dbm is not None else "unknown"
     if rssi_dbm > CCI_CAUTION_RSSI:
@@ -217,9 +217,9 @@ def analyse_network(n: dict, active_mbr_mbps=None, ap_tx_dbm=None,
     dist    = estimate_distance(rssi, frequency_mhz=freq)
     tx      = ap_tx_dbm if ap_tx_dbm is not None else n.get("ap_tx_dbm")
 
-    min_br  = ap_min_basic_rate  if ap_min_basic_rate is not None else n.get("ap_min_basic_rate")
-    br_list = ap_basic_rates     if ap_basic_rates     is not None else n.get("ap_basic_rates", [])
-    all_r   = ap_all_rates       if ap_all_rates       is not None else n.get("ap_all_rates", [])
+    min_br  = ap_min_basic_rate if ap_min_basic_rate is not None else n.get("ap_min_basic_rate")
+    br_list = ap_basic_rates    if ap_basic_rates    is not None else n.get("ap_basic_rates", [])
+    all_r   = ap_all_rates      if ap_all_rates      is not None else n.get("ap_all_rates", [])
 
     return {
         **n,
@@ -413,20 +413,36 @@ def _parse_iw_scan_output(raw: str) -> list[dict]:
 
 class WLANPiSSH:
     """
-    Persistent SSH connection to WLANPi over USB/RNDIS (169.254.42.1).
+    Persistent SSH connection to WLANPi over USB/RNDIS (198.18.42.1).
     Uses Paramiko so it works identically on macOS and Windows.
     Thread-safe: a single connection is reused across Flask threads.
     """
 
     def __init__(
         self,
-        host: str = "169.254.42.1",
+        host: str = None,
         user: str = "wlanpi",
         key_path: str = None,
         password: str = None,
-        connect_timeout: int = 5,
-        exec_timeout: int = 10,
+        connect_timeout: int = 15,
+        exec_timeout: int = 30,
     ):
+        # Auto-detect WLANPi IP if not specified
+        if host is None:
+            import socket as _s
+            for _ip in ["169.254.42.1", "198.18.42.1"]:
+                try:
+                    s = _s.socket(_s.AF_INET, _s.SOCK_STREAM)
+                    s.settimeout(2)
+                    s.connect((_ip, 22))
+                    s.close()
+                    host = _ip
+                    print(f"[WLANPi] Auto-detected host: {host}")
+                    break
+                except Exception:
+                    pass
+            if host is None:
+                host = "169.254.42.1"  # default fallback
         self.host = host
         self.user = user
         self.password = password
@@ -467,17 +483,42 @@ class WLANPiSSH:
             hostname=self.host,
             username=self.user,
             timeout=self.connect_timeout,
+            banner_timeout=30,
+            auth_timeout=30,
         )
 
         import os
         if self.key_path and os.path.exists(self.key_path):
             kwargs["key_filename"] = self.key_path
-        if self.password:
+            kwargs["look_for_keys"] = False
+            kwargs["allow_agent"] = False
+        elif self.password:
             kwargs["password"] = self.password
+        else:
+            # Fall back to SSH agent / default keys
+            pass
 
+        import socket as _socket
+        _sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+        _sock.settimeout(self.connect_timeout)
+        _sock.bind((self._local_ip(), 0))
+        _sock.connect((self.host, 22))
+        kwargs["sock"] = _sock
         client.connect(**kwargs)
         return client
 
+
+    def _local_ip(self) -> str:
+        """Find the local IP that routes to the WLANPi."""
+        import socket as _s
+        try:
+            tmp = _s.socket(_s.AF_INET, _s.SOCK_DGRAM)
+            tmp.connect((self.host, 22))
+            ip = tmp.getsockname()[0]
+            tmp.close()
+            return ip
+        except Exception:
+            return "0.0.0.0"
     def _is_alive(self) -> bool:
         if self._client is None:
             return False
@@ -498,7 +539,7 @@ class WLANPiSSH:
         import socket
         reachable = False
         try:
-            with socket.create_connection((self.host, 22), timeout=2):
+            with socket.create_connection((self.host, 22), timeout=10):
                 reachable = True
         except (OSError, socket.timeout):
             pass
@@ -663,6 +704,7 @@ class WLANPiSSH:
         """
         try:
             # Trigger a fresh scan
+            self.run(f"sudo /sbin/ip link set {interface} up 2>/dev/null || true")
             self.run(f"sudo /usr/sbin/iw dev {interface} scan trigger 2>/dev/null || true")
             time.sleep(3)
             raw, err = self.run(f"sudo /usr/sbin/iw dev {interface} scan dump")
@@ -1015,11 +1057,18 @@ class ScanCache:
     def _loop(self):
         while not self._stop_event.is_set():
             try:
-                networks = scan_networks()
                 connected = get_connected_ap()
                 with self._lock:
-                    self._networks = networks
                     self._connected_ap = connected
+
+                # Skip native scan when WLANPi is active — it has priority
+                if wlanpi.reachable():
+                    self._stop_event.wait(self.interval)
+                    continue
+
+                networks = scan_networks()
+                with self._lock:
+                    self._networks = networks
                     self._last_scan = time.time()
                 log.debug(
                     f"[ScanCache] Refreshed: {len(networks)} networks, "
@@ -1074,10 +1123,10 @@ class ScanCache:
 #: Shared WLANPi SSH connection
 import os as _os
 wlanpi = WLANPiSSH(
-    host="169.254.42.1",
+    host=None,  # Auto-detect: tries 169.254.42.1 (R4/Go) then 198.18.42.1
     user="wlanpi",
+    password="REDACTED",
     key_path=_os.path.expanduser("~/.ssh/id_ed25519"),
-    password="wlanpi",   # fallback si la clé SSH n'est pas encore copiée
 )
 
 #: Shared background scan cache (call .start() in wifi_tool.py after app init)

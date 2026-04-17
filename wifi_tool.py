@@ -57,7 +57,20 @@ app = Flask(__name__, template_folder=_templates_dir)
 # ---------------------------------------------------------------------------
 # ★ CONFIGURATION
 # ---------------------------------------------------------------------------
-WLANPI_SCAN_IFACE = "wlan1"   # WLANPi: wlan0=single adapter, wlan1/wlan2=multi
+# Auto-detect WLANPi scan interface
+def _detect_wlanpi_iface():
+    for iface in ["wlan1", "wlan0", "wlan2"]:
+        try:
+            out, _ = wlanpi.run(f"iw dev {iface} info 2>/dev/null")
+            if iface in out:
+                print(f"[WLANPi] Auto-detected interface: {iface}")
+                return iface
+        except Exception:
+            pass
+    print("[WLANPi] Could not auto-detect interface, defaulting to wlan1")
+    return "wlan1"
+
+WLANPI_SCAN_IFACE = None  # Auto-detected at scan time
 
 # Windows only: specify which Wi-Fi adapter netsh should use for scanning.
 # Set to None to use Windows default, or e.g. "Wi-Fi 3" for a specific adapter.
@@ -73,8 +86,23 @@ FREQ_6GHZ_MIN = 5925
 # ---------------------------------------------------------------------------
 
 def scan_wlanpi_full() -> list[dict]:
+    # Try interfaces in order until one returns results
+    global WLANPI_SCAN_IFACE
+    output = ""
+    for _iface in ([WLANPI_SCAN_IFACE] if WLANPI_SCAN_IFACE else ["wlan1", "wlan0", "wlan2"]):
+        try:
+            wlanpi.run(f"sudo /sbin/ip link set {_iface} up 2>/dev/null || true")
+            _out, _ = wlanpi.run(f"sudo iw dev {_iface} scan 2>/dev/null")
+            if _out.strip():
+                output = _out
+                if WLANPI_SCAN_IFACE != _iface:
+                    WLANPI_SCAN_IFACE = _iface
+                    print(f"[WLANPi] Auto-detected interface: {_iface}")
+                break
+        except Exception:
+            pass
     try:
-        output, _ = wlanpi.run(f"sudo iw dev {WLANPI_SCAN_IFACE} scan 2>/dev/null")
+        pass
     except RuntimeError as e:
         print(f"[WLANPi] {e}")
         return []
@@ -151,8 +179,8 @@ def scan_wlanpi_full() -> list[dict]:
         m = re.match(r"Supported rates:\s*(.+)", s, re.IGNORECASE)
         if m:
             raw = m.group(1).split()
-            basic = [float(r.rstrip('*')) for r in raw if r.endswith('*')]
-            all_r = [float(r.rstrip('*')) for r in raw]
+            basic = [float(r.rstrip("*")) for r in raw if r.endswith("*")]
+            all_r = [float(r.rstrip("*")) for r in raw]
             current["ap_basic_rates"] = basic
             current["ap_all_rates"]   = all_r
             if basic:
@@ -164,9 +192,9 @@ def scan_wlanpi_full() -> list[dict]:
         if m:
             raw = m.group(1).split()
             for r in raw:
-                val = float(r.rstrip('*'))
+                val = float(r.rstrip("*"))
                 current["ap_all_rates"].append(val)
-                if r.endswith('*'):
+                if r.endswith("*"):
                     current["ap_basic_rates"].append(val)
             if current["ap_basic_rates"]:
                 current["ap_min_basic_rate"] = min(current["ap_basic_rates"])
@@ -240,14 +268,11 @@ def _do_refresh_cache():
                 "bssid":         (n.get("bssid") or "").lower(),
                 "rssi":          int(n.get("rssi") or -100),
                 "channel":       int(n.get("channel") or 1),
-                "freq_mhz":           n.get("freq_mhz"),
-                "band":               n.get("band"),
-                "ap_tx_dbm":          None,
-                "ch_util_pct":        n.get("ch_util_pct"),
-                "station_count":      n.get("station_count"),
-                "ap_basic_rates":     [],
-                "ap_all_rates":       [],
-                "ap_min_basic_rate":  None,
+                "freq_mhz":      n.get("freq_mhz"),   # preserve for 6 GHz detection
+                "band":          n.get("band"),        # preserve corrected band
+                "ap_tx_dbm":     None,
+                "ch_util_pct":   n.get("ch_util_pct"),
+                "station_count": n.get("station_count"),
             }
             for n in snapshot["networks"]
             if n.get("ssid") and n.get("bssid")
@@ -370,7 +395,8 @@ def main():
     print(f"Platform: {sys.platform}")
     print(f"WLANPi scan interface: {WLANPI_SCAN_IFACE}")
     print("Running initial scan...")
-    time.sleep(3)
+    time.sleep(10)
+    wlanpi.probe()  # Ensure WLANPi is detected before first scan
     refresh_cache()
 
     n   = len(_cache["networks"])
