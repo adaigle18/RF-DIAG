@@ -612,7 +612,7 @@
             <th class="sortable" data-sort="bssid" data-col="bssid"      onclick="setSort('bssid')">BSSID<span class="sort-arrow"></span></th>
             <th class="sortable" data-sort="channel" data-col="channel"    onclick="setSort('channel')">Band / CH<span class="sort-arrow"></span></th>
             <th class="sortable sort-desc" data-sort="rssi" data-col="rssi" onclick="setSort('rssi')">RSSI<span class="sort-arrow"></span></th>
-            <th class="sortable" data-sort="distance_m" data-col="distance" onclick="setSort('distance_m')">Distance (Pwr: 20dBm)<span class="sort-arrow"></span></th>
+            <th class="sortable" data-sort="distance_m" data-col="distance" onclick="setSort('distance_m')" title="Log-distance model at 2.4 GHz / 20 dBm — consistent across all bands">Distance (2.4GHz ref)<span class="sort-arrow"></span></th>
             <th data-col="band">Band</th>
             <th class="sortable" data-sort="mbr" data-col="mbr"        onclick="setSort('mbr')">MBR Supported<span class="sort-arrow"></span></th>
             <th data-col="txpower">TX Power</th>
@@ -673,6 +673,7 @@
         <!-- Buttons -->
         <div class="survey-ctrl-row">
           <button class="survey-btn" onclick="triggerPlanUpload()">&#8679; Load plan</button>
+          <button class="survey-btn danger" onclick="clearMap()" title="Remove floor plan and reset survey">&#128465; Clear map</button>
           <button class="survey-btn calib" id="calib-btn" onclick="toggleCalibMode()">&#9141; Calibrate</button>
           <button class="survey-btn" id="survey-refresh-btn" onclick="surveyRefresh()" title="Trigger fresh Wi-Fi scan">&#8635; Scan</button>
           <button class="survey-btn danger" onclick="clearSurvey()">&#10006; Clear</button>
@@ -1216,6 +1217,7 @@ function renderDetail(panel, detailId) {
           <div class="kv"><span class="k">TX Power</span><span class="v ${n.ap_tx_dbm !== null && n.ap_tx_dbm !== undefined ? 'good' : ''}">${n.ap_tx_dbm !== null && n.ap_tx_dbm !== undefined ? n.ap_tx_dbm + ' dBm' : '20 dBm (default)'}</span></div>
           <div class="kv"><span class="k">RSSI</span><span class="v">${n.rssi} dBm</span></div>
           <div class="kv"><span class="k">Freq.</span><span class="v">${n.frequency_mhz || '?'} MHz</span></div>
+          <div class="kv"><span class="k">Ref. freq.</span><span class="v" style="color:var(--text-dim);font-size:10px;">2437 MHz (2.4 GHz — same for all bands)</span></div>
           <div class="kv"><span class="k">Est. distance</span><span class="v good">${n.distance_m} m</span></div>
           <div class="kv"><span class="k">Zone</span><span class="v">${n.distance_label}</span></div>
           <div class="kv"><span class="k">Band / CH</span><span class="v">${n.band} / ${n.channel}</span></div>
@@ -1523,6 +1525,7 @@ function exportCSV() {
 let surveyOpen    = false;
 let surveyPoints  = [];   // [{x,y,rssi,ssid,ssidIdx,ts}]  ssidIdx: 1|2
 let planLoaded    = false;
+let planObjectUrl = null;  // track so we can revoke on clear
 let selectedSsid  = '';
 let selectedSsid2 = '';
 let thresholdDbm  = -70;
@@ -1632,7 +1635,8 @@ function loadPlan(evt) {
     warn.style.display = 'none';
   }
 
-  const url = URL.createObjectURL(file);
+  if (planObjectUrl) URL.revokeObjectURL(planObjectUrl);
+  planObjectUrl = URL.createObjectURL(file);
   const img = document.getElementById('plan-img');
   img.onload = () => {
     // Pixel dimension check
@@ -1651,7 +1655,7 @@ function loadPlan(evt) {
     setTimeout(() => { resizeCanvases(); updateLegend(); }, 400);
     setTimeout(() => { resizeCanvases(); }, 800);
   };
-  img.src = url;
+  img.src = planObjectUrl;
   img.style.display = 'block';
 }
 
@@ -1940,6 +1944,36 @@ function clearSurvey() {
   if (surveyPoints.length > 0 && !confirm('Clear all survey points?')) return;
   surveyPoints = [];
   drawHeatmap(); drawThreshold(); drawPoints(); renderPointsList();
+}
+
+function clearMap() {
+  if (!planLoaded) return;
+  if (!confirm('Remove the floor plan and clear all survey points?')) return;
+  // Reset image — revoke the blob URL and remove the src attribute
+  // (setting src='' can cause browsers to try fetching the current page URL)
+  if (planObjectUrl) { URL.revokeObjectURL(planObjectUrl); planObjectUrl = null; }
+  const img = document.getElementById('plan-img');
+  img.removeAttribute('src');
+  img.style.display = 'none';
+  // Reset upload input so the same file can be re-loaded
+  const upload = document.getElementById('plan-upload');
+  upload.value = '';
+  // Reset state
+  planLoaded = false;
+  surveyPoints = [];
+  calibScale = null; calibPtA = null; calibPtB = null; calibMode = false;
+  document.getElementById('plan-drop-zone').classList.remove('has-plan');
+  document.getElementById('survey-placeholder').style.display = '';
+  document.getElementById('plan-size-warn').style.display = 'none';
+  document.getElementById('calib-status').style.display = 'none';
+  document.getElementById('calib-scale-display').textContent = '';
+  document.getElementById('calib-btn').classList.remove('active');
+  // Clear all canvases
+  [heatCanvas(), thrCanvas(), calibCanvas(), ptCanvas()].forEach(c => {
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, c.width, c.height);
+  });
+  renderPointsList();
 }
 
 // ── Export JSON ──────────────────────────────────────────

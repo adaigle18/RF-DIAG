@@ -214,7 +214,10 @@ def analyse_network(n: dict, active_mbr_mbps=None, ap_tx_dbm=None,
     channel = n["channel"]
     # Use stored frequency if available (most accurate for band detection)
     freq    = n.get("freq_mhz") or channel_to_frequency_mhz(channel)
-    dist    = estimate_distance(rssi, frequency_mhz=freq)
+    # Always use 2.4 GHz reference frequency for distance estimation so that
+    # the same AP seen on multiple bands (2.4/5/6 GHz) yields a consistent
+    # distance value rather than artificially shorter estimates on higher bands.
+    dist    = estimate_distance(rssi, frequency_mhz=2437)
     tx      = ap_tx_dbm if ap_tx_dbm is not None else n.get("ap_tx_dbm")
 
     min_br  = ap_min_basic_rate if ap_min_basic_rate is not None else n.get("ap_min_basic_rate")

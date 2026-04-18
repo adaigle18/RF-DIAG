@@ -35,6 +35,8 @@ try:
         shutdown,
         PLATFORM,
         analyse_network,
+        estimate_distance,
+        distance_label,
     )
 except ImportError as e:
     raise SystemExit(
@@ -299,6 +301,34 @@ def _do_refresh_cache():
             enriched.append(data)
         except Exception as e:
             print(f"[Enrich] {e}")
+
+    # Post-process: for APs visible on multiple bands, pin distance to the
+    # 2.4 GHz radio's RSSI so all radios of the same physical AP show the
+    # same distance estimate.  Radios are matched by BSSID octets 1–4
+    # (the middle 4 bytes of the 6-byte MAC).  This handles two common
+    # vendor BSSID assignment schemes:
+    #   • last-octet increment  (e.g. TP-Link: 1c:61:b4:ad:65:ef / :eb / :ec)
+    #   • first-octet bit-flip  (e.g. DOAL:    bc:3e:07:24:fc:d8 / be:3e:07:24:fc:d0)
+    # In both cases octets 1–4 are identical across all radios of the same AP.
+    def _ap_key(bssid: str) -> str:
+        parts = (bssid or "").split(":")
+        return ":".join(parts[1:5]) if len(parts) == 6 else ""
+
+    prefix_to_rssi24: dict[str, int] = {}
+    for net in enriched:
+        if net.get("has_2_4ghz"):
+            key = _ap_key(net.get("bssid", ""))
+            if key:
+                if key not in prefix_to_rssi24 or net["rssi"] > prefix_to_rssi24[key]:
+                    prefix_to_rssi24[key] = net["rssi"]
+
+    for net in enriched:
+        if not net.get("has_2_4ghz"):
+            key = _ap_key(net.get("bssid", ""))
+            ref_rssi = prefix_to_rssi24.get(key)
+            if ref_rssi is not None:
+                net["distance_m"]    = estimate_distance(ref_rssi, frequency_mhz=2437)
+                net["distance_label"] = distance_label(net["distance_m"])
 
     with _lock:
         _cache.update({
