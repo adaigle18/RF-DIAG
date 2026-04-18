@@ -66,7 +66,7 @@ exe = EXE(
     console=True,           # keep True so logs appear if launched from Terminal
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch=None,
+    target_arch='arm64',
     codesign_identity=None,
     entitlements_file='entitlements.plist',
 )

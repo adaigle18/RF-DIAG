@@ -923,6 +923,14 @@ def scan_networks_corewlan() -> list[dict]:
             log.warning("[CoreWLAN] No Wi-Fi interface found")
             return []
 
+        # Ensure a CFRunLoop exists on this thread — required for CoreWLAN
+        # API calls from non-main daemon threads in bundled .app contexts.
+        try:
+            import CoreFoundation
+            CoreFoundation.CFRunLoopGetCurrent()
+        except Exception:
+            pass
+
         networks, error = iface.scanForNetworksWithName_error_(None, None)
         if error:
             log.warning(f"[CoreWLAN] Scan error: {error}")

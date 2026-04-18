@@ -31,6 +31,7 @@ try:
     from wifi_utils import (
         wlanpi,
         scan_cache,
+        scan_networks,
         shutdown,
         PLATFORM,
         analyse_network,
@@ -261,7 +262,9 @@ def _do_refresh_cache():
     source = "wlanpi"
 
     if not raw:
-        snapshot = scan_cache.snapshot()
+        # Call scan_networks() directly — CoreWLAN scans from the scan_cache
+        # background thread return 0 results on macOS 14+ in bundled .app contexts.
+        native = scan_cache.snapshot()["networks"] or scan_networks()
         raw = [
             {
                 "ssid":          n.get("ssid") or "",
@@ -274,8 +277,8 @@ def _do_refresh_cache():
                 "ch_util_pct":   n.get("ch_util_pct"),
                 "station_count": n.get("station_count"),
             }
-            for n in snapshot["networks"]
-            if n.get("ssid") and n.get("bssid")
+            for n in native
+            if n.get("bssid")
         ]
         source = PLATFORM
 

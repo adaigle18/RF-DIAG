@@ -38,22 +38,38 @@ def _request_location_permission():
         from CoreLocation import (
             CLLocationManager,
             kCLAuthorizationStatusNotDetermined,
+            kCLAuthorizationStatusAuthorizedWhenInUse,
+            kCLAuthorizationStatusAuthorizedAlways,
         )
         # An NSApplication context is required for the permission dialog
-        AppKit.NSApplication.sharedApplication()
+        app = AppKit.NSApplication.sharedApplication()
+        app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)
 
         mgr = CLLocationManager.alloc().init()
         status = CLLocationManager.authorizationStatus()
         print(f"[Location] Authorization status: {status}")
 
         if status == kCLAuthorizationStatusNotDetermined:
-            print("[Location] Requesting permission...")
+            print("[Location] Requesting permission — please respond to the dialog...")
             mgr.requestWhenInUseAuthorization()
-            # Run the event loop briefly so the dialog can appear
-            AppKit.NSRunLoop.currentRunLoop().runUntilDate_(
-                AppKit.NSDate.dateWithTimeIntervalSinceNow_(3.0)
-            )
+            # Poll the run loop until permission is determined (up to 60 s)
+            deadline = AppKit.NSDate.dateWithTimeIntervalSinceNow_(60.0)
+            while True:
+                AppKit.NSRunLoop.currentRunLoop().runUntilDate_(
+                    AppKit.NSDate.dateWithTimeIntervalSinceNow_(0.5)
+                )
+                status = CLLocationManager.authorizationStatus()
+                if status != kCLAuthorizationStatusNotDetermined:
+                    break
+                if AppKit.NSDate.date().compare_(deadline) != -1:  # NSOrderedAscending
+                    print("[Location] Timed out waiting for permission.")
+                    break
 
+        granted = status in (
+            kCLAuthorizationStatusAuthorizedWhenInUse,
+            kCLAuthorizationStatusAuthorizedAlways,
+        )
+        print(f"[Location] Permission {'granted' if granted else 'denied or undetermined'} (status={status})")
         return mgr   # keep reference alive
     except Exception as e:
         print(f"[Location] Permission request failed: {e}")
