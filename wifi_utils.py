@@ -431,16 +431,22 @@ class WLANPiSSH:
         if host is None:
             import socket as _s
             for _ip in ["169.254.42.1", "198.18.42.1"]:
+                _sock = None
                 try:
-                    s = _s.socket(_s.AF_INET, _s.SOCK_STREAM)
-                    s.settimeout(2)
-                    s.connect((_ip, 22))
-                    s.close()
+                    _sock = _s.socket(_s.AF_INET, _s.SOCK_STREAM)
+                    _sock.settimeout(2)
+                    _sock.connect((_ip, 22))
                     host = _ip
                     print(f"[WLANPi] Auto-detected host: {host}")
                     break
-                except Exception:
-                    pass
+                except Exception as _e:
+                    log.debug(f"[WLANPi] {_ip} not reachable during init: {_e}")
+                finally:
+                    if _sock is not None:
+                        try:
+                            _sock.close()
+                        except Exception:
+                            pass
             if host is None:
                 host = "169.254.42.1"  # default fallback
         self.host = host
@@ -501,24 +507,29 @@ class WLANPiSSH:
         import socket as _socket
         _sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
         _sock.settimeout(self.connect_timeout)
-        _sock.bind((self._local_ip(), 0))
-        _sock.connect((self.host, 22))
-        kwargs["sock"] = _sock
-        client.connect(**kwargs)
+        try:
+            _sock.bind((self._local_ip(), 0))
+            _sock.connect((self.host, 22))
+            kwargs["sock"] = _sock
+            client.connect(**kwargs)
+        except Exception:
+            _sock.close()
+            raise
         return client
 
 
     def _local_ip(self) -> str:
         """Find the local IP that routes to the WLANPi."""
         import socket as _s
+        tmp = _s.socket(_s.AF_INET, _s.SOCK_DGRAM)
         try:
-            tmp = _s.socket(_s.AF_INET, _s.SOCK_DGRAM)
             tmp.connect((self.host, 22))
-            ip = tmp.getsockname()[0]
-            tmp.close()
-            return ip
-        except Exception:
+            return tmp.getsockname()[0]
+        except Exception as e:
+            log.debug(f"[WLANPi] Could not determine local IP for {self.host}: {e}")
             return "0.0.0.0"
+        finally:
+            tmp.close()
     def _is_alive(self) -> bool:
         if self._client is None:
             return False
@@ -789,13 +800,17 @@ def _parse_netsh_networks(raw: str) -> list[dict]:
     return networks
 
 
-def scan_networks_netsh() -> list[dict]:
+def scan_networks_netsh(interface: str | None = None) -> list[dict]:
     """
     Run netsh scan and return parsed BSSID list.
+    Pass interface to target a specific Wi-Fi adapter (e.g. "Wi-Fi 3").
     """
     try:
+        cmd = ["netsh", "wlan", "show", "networks", "mode=bssid"]
+        if interface:
+            cmd = ["netsh", "wlan", "show", "networks", f"interface={interface}", "mode=bssid"]
         result = subprocess.run(
-            ["netsh", "wlan", "show", "networks", "mode=bssid"],
+            cmd,
             capture_output=True,
             text=True,
             timeout=10,
@@ -1006,12 +1021,12 @@ def get_connected_ap_corewlan() -> dict | None:
 # Platform dispatcher
 # ===========================================================================
 
-def scan_networks() -> list[dict]:
+def scan_networks(netsh_interface: str | None = None) -> list[dict]:
     """Scan Wi-Fi networks — dispatches to the right backend."""
     if PLATFORM == "darwin":
         return scan_networks_corewlan()
     elif PLATFORM == "win32":
-        return scan_networks_netsh()
+        return scan_networks_netsh(interface=netsh_interface)
     else:
         log.warning(f"[Scanner] Unsupported platform: {PLATFORM}")
         return []
@@ -1037,8 +1052,9 @@ class ScanCache:
     and caches the results. Thread-safe reads via a lock.
     """
 
-    def __init__(self, interval: int = 15):
+    def __init__(self, interval: int = 15, netsh_interface: str | None = None):
         self.interval = interval
+        self.netsh_interface = netsh_interface
         self._lock = threading.Lock()
         self._networks: list[dict] = []
         self._connected_ap: dict | None = None
@@ -1070,11 +1086,11 @@ class ScanCache:
                     self._connected_ap = connected
 
                 # Skip native scan when WLANPi is active — it has priority
-                if wlanpi.reachable():
+                if wlanpi.reachable:
                     self._stop_event.wait(self.interval)
                     continue
 
-                networks = scan_networks()
+                networks = scan_networks(netsh_interface=self.netsh_interface)
                 with self._lock:
                     self._networks = networks
                     self._last_scan = time.time()

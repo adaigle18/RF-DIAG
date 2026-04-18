@@ -55,6 +55,9 @@ def _resource_path(relative: str) -> str:
 _templates_dir = _os.environ.get("RFDIAG_TEMPLATES", _resource_path("templates"))
 app = Flask(__name__, template_folder=_templates_dir)
 
+# Stop event shared by background threads so they exit cleanly on shutdown
+_stop = threading.Event()
+
 # ---------------------------------------------------------------------------
 # ★ CONFIGURATION
 # ---------------------------------------------------------------------------
@@ -66,8 +69,8 @@ def _detect_wlanpi_iface():
             if iface in out:
                 print(f"[WLANPi] Auto-detected interface: {iface}")
                 return iface
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[WLANPi] Interface probe {iface} failed: {e}")
     print("[WLANPi] Could not auto-detect interface, defaulting to wlan1")
     return "wlan1"
 
@@ -100,13 +103,8 @@ def scan_wlanpi_full() -> list[dict]:
                     WLANPI_SCAN_IFACE = _iface
                     print(f"[WLANPi] Auto-detected interface: {_iface}")
                 break
-        except Exception:
-            pass
-    try:
-        pass
-    except RuntimeError as e:
-        print(f"[WLANPi] {e}")
-        return []
+        except Exception as e:
+            print(f"[WLANPi] {_iface} scan failed: {e}")
 
     if not output.strip():
         return []
@@ -315,18 +313,18 @@ def _do_refresh_cache():
 
 
 def background_refresher():
-    while True:
+    while not _stop.is_set():
         try:
             refresh_cache()
         except Exception as e:
             print(f"[Refresh] {e}")
-        time.sleep(30)
+        _stop.wait(30)
 
 
 def wlanpi_prober():
     """Probe WLANPi every 10 s via TCP port 22. Auto-scan when first detected."""
     was_reachable = False
-    while True:
+    while not _stop.is_set():
         try:
             now_reachable = wlanpi.probe()
             if now_reachable and not was_reachable:
@@ -337,7 +335,7 @@ def wlanpi_prober():
             was_reachable = now_reachable
         except Exception as e:
             print(f"[WLANPi Probe] {e}")
-        time.sleep(10)
+        _stop.wait(10)
 
 
 # ---------------------------------------------------------------------------
@@ -389,9 +387,15 @@ def api_status():
 # Startup
 # ---------------------------------------------------------------------------
 
+def _shutdown():
+    """Signal background threads to stop, then clean up wifi_utils resources."""
+    _stop.set()
+    shutdown()
+
+
 def main():
     """Start RF-DIAG. Called directly or from app_launcher.py (.app bundle)."""
-    atexit.register(shutdown)
+    atexit.register(_shutdown)
     scan_cache.netsh_interface = NETSH_INTERFACE  # Windows adapter config
     scan_cache.start()
 

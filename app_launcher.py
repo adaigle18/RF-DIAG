@@ -103,7 +103,21 @@ def _open_browser_when_ready():
             pass
 
 
+def _already_running(port: int = 5001) -> bool:
+    """Return True if something is already listening on the given port."""
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
 if __name__ == "__main__":
+    if _already_running():
+        # Another instance is up — just bring the UI to the front and quit.
+        print("[Launcher] RF-DIAG already running on port 5001 — opening browser.")
+        webbrowser.open("http://127.0.0.1:5001")
+        sys.exit(0)
+
     _loc_mgr = _request_location_permission()   # triggers the system dialog
 
     threading.Thread(target=_open_browser_when_ready, daemon=True).start()
