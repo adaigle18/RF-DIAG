@@ -97,7 +97,6 @@ def scan_wlanpi_full() -> list[dict]:
     output = ""
     for _iface in ([WLANPI_SCAN_IFACE] if WLANPI_SCAN_IFACE else ["wlan1", "wlan0", "wlan2"]):
         try:
-            wlanpi.run(f"sudo /sbin/ip link set {_iface} up 2>/dev/null || true")
             _out, _ = wlanpi.run(f"sudo iw dev {_iface} scan 2>/dev/null")
             if _out.strip():
                 output = _out
