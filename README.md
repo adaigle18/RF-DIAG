@@ -141,6 +141,26 @@ ssh wlanpi@169.254.42.1 "iw dev"
 
 Look for `type managed` next to your scan interface. If it shows `type monitor`, plug in a USB Wi-Fi adapter.
 
+**0 networks after rebuild (macOS)**
+
+After rebuilding the `.app`, a stale process from the previous build may still be running on port 5001.
+The new app detects the port is in use and skips startup — so Location Services is never re-requested.
+
+Force-quit all instances before launching a new build:
+
+```bash
+pkill -9 -f RF-DIAG
+```
+
+Then open `dist/RF-DIAG.app` normally. If RF-DIAG still doesn't appear in Location Services, go to
+**System Settings → Privacy & Security → Location Services**, toggle RF-DIAG off and back on, then restart the app.
+
+**0 networks with no WLANPi (macOS)**
+
+RF·DIAG requires Location Services permission to return SSIDs via CoreWLAN.  
+Go to **System Settings → Privacy & Security → Location Services** and ensure RF-DIAG is enabled.  
+If it doesn't appear, launch `dist/RF-DIAG.app` once — the permission request registers it automatically.
+
 Without a WLANPi, RF·DIAG falls back to:
 - **MBR** — estimated from RSSI thresholds (not the actual AP-advertised rate)
 - **TX Power** — defaulted to 20 dBm (affects distance calculation accuracy)
