@@ -543,20 +543,46 @@ class WLANPiSSH:
     # Public API
     # ------------------------------------------------------------------
 
+    # Candidate IPs to probe, in priority order (R4/Go link-local first, then RNDIS static)
+    _PROBE_IPS = ["169.254.42.1", "198.18.42.1"]
+
     def probe(self) -> bool:
         """
-        Fast reachability check: TCP connect to port 22, ~2 s timeout.
-        Does NOT perform an SSH handshake.  Updates _reachable and closes
-        any stale SSH client when the host goes away.
+        Fast reachability check: TCP connect to port 22, ~2 s timeout per IP.
+        Tries all candidate IPs each cycle so the WLANPi is detected regardless
+        of which IP it used at startup.  Updates self.host when a new IP answers.
+        Does NOT perform an SSH handshake.  Closes any stale SSH client when
+        the device goes away.
         Returns True if the WLANPi is reachable.
         """
         import socket
+
+        # Always probe the current host first; fall back to the other candidates.
+        candidates = [self.host] + [ip for ip in self._PROBE_IPS if ip != self.host]
+
         reachable = False
-        try:
-            with socket.create_connection((self.host, 22), timeout=10):
-                reachable = True
-        except (OSError, socket.timeout):
-            pass
+        found_ip = None
+        for ip in candidates:
+            try:
+                with socket.create_connection((ip, 22), timeout=2):
+                    reachable = True
+                    found_ip = ip
+                    break
+            except (OSError, socket.timeout):
+                pass
+
+        if reachable and found_ip and found_ip != self.host:
+            log.info(f"[WLANPi] Host updated: {self.host} → {found_ip}")
+            with self._lock:
+                self.host = found_ip
+                # Drop stale client so next run() reconnects to the new IP
+                if self._client:
+                    try:
+                        self._client.close()
+                    except Exception:
+                        pass
+                    self._client = None
+                self._available = False
 
         if reachable and not self._reachable:
             log.info(f"[WLANPi] Device detected at {self.host}")
