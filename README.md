@@ -101,11 +101,11 @@ No manual configuration needed for standard WLANPi setups.
 
 ### SSH Key Setup (one-time)
 
-RF·DIAG connects via SSH using your `~/.ssh/id_ed25519` key (falls back to `id_rsa` if not found).  
-Copy your public key to the WLANPi once:
+RF·DIAG connects via SSH key authentication automatically (tries `id_ed25519` then `id_rsa`).  
+Copy your public key to the WLANPi once — replace `your_key.pub` with your actual public key filename:
 
 ```bash
-ssh-copy-id -i ~/.ssh/id_ed25519.pub wlanpi@169.254.42.1
+ssh-copy-id wlanpi@169.254.42.1
 ```
 
 After this, RF·DIAG connects automatically without a password prompt.

@@ -1183,10 +1183,10 @@ class ScanCache:
 #: Shared WLANPi SSH connection
 import os as _os
 wlanpi = WLANPiSSH(
-    host=None,  # Auto-detect: tries 169.254.42.1 (R4/Go) then 198.18.42.1
+    host=None,      # Auto-detect: tries 169.254.42.1 (R4/Go) then 198.18.42.1
     user="wlanpi",
     password=_os.environ.get("WLANPI_PASSWORD"),
-    key_path=_os.path.expanduser("~/.ssh/id_ed25519"),
+    key_path=None,  # Auto-detect: tries id_ed25519 then id_rsa
 )
 
 #: Shared background scan cache (call .start() in wifi_tool.py after app init)
