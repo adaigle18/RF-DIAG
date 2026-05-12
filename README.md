@@ -93,16 +93,16 @@ If the WLANPi disconnects, RF·DIAG falls back to the native scan with no interv
 
 ### Auto-detection
 
-RF·DIAG automatically detects:
-- **IP address** — tries `169.254.42.1` first, then `198.18.42.1`
-- **Scan interface** — tries `wlan1`, `wlan0`, `wlan2` in order
+RF·DIAG probes for the WLANPi every 10 seconds — you can plug it in at any time, before or after launching the app:
+- **IP address** — tries `169.254.42.1` (R4/Go link-local) then `198.18.42.1` (RNDIS static) every cycle
+- **Scan interface** — tries `wlan1`, `wlan0`, `wlan2` in order and locks on to whichever returns data
 
 No manual configuration needed for standard WLANPi setups.
 
 ### SSH Key Setup (one-time)
 
-RF·DIAG connects via SSH using `~/.ssh/id_ed25519`.  
-Copy your key to the WLANPi once:
+RF·DIAG connects via SSH using your `~/.ssh/id_ed25519` key (falls back to `id_rsa` if not found).  
+Copy your public key to the WLANPi once:
 
 ```bash
 ssh-copy-id -i ~/.ssh/id_ed25519.pub wlanpi@169.254.42.1
@@ -110,9 +110,36 @@ ssh-copy-id -i ~/.ssh/id_ed25519.pub wlanpi@169.254.42.1
 
 After this, RF·DIAG connects automatically without a password prompt.
 
-> **Best results with two Wi-Fi adapters on the WLANPi.**  
-> With a dual-adapter setup, one adapter scans (wlan1) while the other stays connected (wlan0), giving you uninterrupted passive scan data without dropping the management link.  
-> Single-adapter WLANPi works but may miss networks during the scan trigger window.
+### USB Wi-Fi Adapter Requirement
+
+RF·DIAG scans using `iw dev scan`, which requires an adapter in **managed mode**.
+
+> **Recommended: two Wi-Fi adapters on the WLANPi.**  
+> `wlan0` is typically the built-in adapter running in monitor mode — it cannot perform active scans.  
+> Plug in a USB Wi-Fi adapter (it will appear as `wlan1`) and RF·DIAG will use it automatically for scanning.  
+> Single-adapter setups work only if that adapter is in managed mode.
+
+### Troubleshooting
+
+**WLANPi not detected after reflash or replacement**
+
+If the WLANPi's SSH host key has changed, you will see a "host key mismatch" error. Clear the old entry and reconnect:
+
+```bash
+ssh-keygen -R 169.254.42.1
+```
+
+Then restart RF·DIAG — it will re-accept the new host key automatically.
+
+**Scan returns no networks despite WLANPi being reachable**
+
+Check that the scanning adapter (`wlan1`) is in managed mode:
+
+```bash
+ssh wlanpi@169.254.42.1 "iw dev"
+```
+
+Look for `type managed` next to your scan interface. If it shows `type monitor`, plug in a USB Wi-Fi adapter.
 
 Without a WLANPi, RF·DIAG falls back to:
 - **MBR** — estimated from RSSI thresholds (not the actual AP-advertised rate)

@@ -460,12 +460,19 @@ class WLANPiSSH:
 
         # Default key path per platform
         if key_path is None:
+            import os
             if PLATFORM == "win32":
-                import os
-                key_path = os.path.expanduser(r"~\.ssh\id_rsa")
+                for _name in [r"~\.ssh\id_ed25519", r"~\.ssh\id_rsa"]:
+                    _p = os.path.expanduser(_name)
+                    if os.path.exists(_p):
+                        key_path = _p
+                        break
             else:
-                import os
-                key_path = os.path.expanduser("~/.ssh/id_rsa")
+                for _name in ["~/.ssh/id_ed25519", "~/.ssh/id_rsa"]:
+                    _p = os.path.expanduser(_name)
+                    if os.path.exists(_p):
+                        key_path = _p
+                        break
         self.key_path = key_path
 
         self._client = None
