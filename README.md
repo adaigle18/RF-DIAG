@@ -194,6 +194,7 @@ NETSH_INTERFACE = "Wi-Fi 3"   # or None for default
 ## Documentation
 
 - [macOS Setup Guide](docs/RF-DIAG_Setup_Guide_macOS.md) — step-by-step setup including Location Services, PyInstaller build, and WLANPi connection
+- [Windows Setup Guide](docs/RF-DIAG_Guide_Windows.md) — installation guide for Windows 10/11 with and without WLANPi (French)
 
 ---
 
