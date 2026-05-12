@@ -431,7 +431,7 @@ def main():
     print(f"Platform: {sys.platform}")
     print(f"WLANPi scan interface: {WLANPI_SCAN_IFACE}")
     print("Running initial scan...")
-    time.sleep(10)
+    time.sleep(2)
     wlanpi.probe()  # Ensure WLANPi is detected before first scan
     refresh_cache()
 
