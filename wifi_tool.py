@@ -67,7 +67,7 @@ _stop = threading.Event()
 def _detect_wlanpi_iface():
     for iface in ["wlan1", "wlan0", "wlan2"]:
         try:
-            out, _ = wlanpi.run(f"iw dev {iface} info 2>/dev/null")
+            out, _ = wlanpi.run(f"/usr/sbin/iw dev {iface} info 2>/dev/null")
             if iface in out:
                 print(f"[WLANPi] Auto-detected interface: {iface}")
                 return iface
@@ -97,7 +97,7 @@ def scan_wlanpi_full() -> list[dict]:
     output = ""
     for _iface in ([WLANPI_SCAN_IFACE] if WLANPI_SCAN_IFACE else ["wlan1", "wlan0", "wlan2"]):
         try:
-            _out, _ = wlanpi.run(f"sudo iw dev {_iface} scan 2>/dev/null")
+            _out, _ = wlanpi.run(f"sudo /usr/sbin/iw dev {_iface} scan 2>/dev/null")
             if _out.strip():
                 output = _out
                 if WLANPI_SCAN_IFACE != _iface:
