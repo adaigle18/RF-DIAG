@@ -193,7 +193,7 @@ NETSH_INTERFACE = "Wi-Fi 3"   # or None for default
 
 ## Documentation
 
-- [macOS Installation Guide (PDF)](docs/RFDIAG_macOS_Installation_Guide.pdf) — step-by-step setup including Location Services, PyInstaller build, and WLANPi connection
+- [macOS Setup Guide](docs/RF-DIAG_Setup_Guide_macOS.md) — step-by-step setup including Location Services, PyInstaller build, and WLANPi connection
 
 ---
 
