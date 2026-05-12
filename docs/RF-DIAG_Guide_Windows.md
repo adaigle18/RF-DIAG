@@ -214,6 +214,7 @@ Aucune configuration manuelle requise.
 | Problème | Solution |
 |---|---|
 | 0 réseaux trouvés | Vérifier `NETSH_INTERFACE` dans `wifi_tool.py`. Exécuter `netsh wlan show interfaces` pour voir les noms d'adaptateurs. |
+| Port 5001 déjà utilisé (processus bloqué) | Un ancien `wifi_tool.py` tourne encore. Dans PowerShell : `netstat -ano \| findstr :5001` pour trouver le PID, puis `taskkill /F /PID <PID>`. Relancer ensuite. |
 | Réseau 6 GHz affiché en 5 GHz | Connecter l'adaptateur au réseau 6 GHz, puis redémarrer `wifi_tool.py`. |
 | Page ne charge pas | Utiliser `http://127.0.0.1:5001` — pas 127.0.0.0 ou localhost. |
 | Seul le 2.4 GHz visible | Adaptateur intégré limité. Brancher un adaptateur USB Wi-Fi 6E/7 et configurer `NETSH_INTERFACE`. |
