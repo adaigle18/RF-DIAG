@@ -430,16 +430,16 @@ def main():
 
     print(f"Platform: {sys.platform}")
     print(f"WLANPi scan interface: {WLANPI_SCAN_IFACE}")
-    print("Running initial scan...")
-    time.sleep(2)
-    wlanpi.probe()  # Ensure WLANPi is detected before first scan
-    refresh_cache()
+    def _initial_scan():
+        time.sleep(2)
+        wlanpi.probe()
+        refresh_cache()
+        n   = len(_cache["networks"])
+        src = _cache["scan_source"]
+        print(f"Found {n} networks via {src}.")
+        print("WLANPi: not connected / unavailable" if not wlanpi.available else f"WLANPi OK [{WLANPI_SCAN_IFACE}]")
 
-    n   = len(_cache["networks"])
-    src = _cache["scan_source"]
-    print(f"Found {n} networks via {src}.")
-    print("WLANPi: not connected / unavailable" if not wlanpi.available else f"WLANPi OK [{WLANPI_SCAN_IFACE}]")
-
+    threading.Thread(target=_initial_scan, daemon=True).start()
     threading.Thread(target=background_refresher, daemon=True).start()
     threading.Thread(target=wlanpi_prober, daemon=True).start()
     app.run(host="0.0.0.0", debug=False, port=5001)

@@ -504,22 +504,47 @@ class WLANPiSSH:
         )
 
         import os
+
+        def _make_sock():
+            import socket as _socket
+            s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+            s.settimeout(self.connect_timeout)
+            try:
+                s.bind((self._local_ip(), 0))
+                s.connect((self.host, 22))
+            except Exception:
+                s.close()
+                raise
+            return s
+
+        # Try key first, then fall back to password if key auth fails
         if self.key_path and os.path.exists(self.key_path):
-            kwargs["key_filename"] = self.key_path
+            try:
+                _sock = _make_sock()
+                try:
+                    client.connect(
+                        **kwargs,
+                        key_filename=self.key_path,
+                        look_for_keys=False,
+                        allow_agent=False,
+                        sock=_sock,
+                    )
+                    return client
+                except Exception:
+                    _sock.close()
+                    raise
+            except Exception as _key_err:
+                log.debug(f"[WLANPi] Key auth failed ({_key_err}), trying password.")
+                client = paramiko.SSHClient()
+                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        if self.password:
+            kwargs["password"] = self.password
             kwargs["look_for_keys"] = False
             kwargs["allow_agent"] = False
-        elif self.password:
-            kwargs["password"] = self.password
-        else:
-            # Fall back to SSH agent / default keys
-            pass
 
-        import socket as _socket
-        _sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
-        _sock.settimeout(self.connect_timeout)
+        _sock = _make_sock()
         try:
-            _sock.bind((self._local_ip(), 0))
-            _sock.connect((self.host, 22))
             kwargs["sock"] = _sock
             client.connect(**kwargs)
         except Exception:
