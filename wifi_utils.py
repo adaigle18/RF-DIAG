@@ -1210,7 +1210,7 @@ import os as _os
 wlanpi = WLANPiSSH(
     host=None,      # Auto-detect: tries 169.254.42.1 (R4/Go) then 198.18.42.1
     user="wlanpi",
-    password=_os.environ.get("WLANPI_PASSWORD"),
+    password=_os.environ.get("WLANPI_PASSWORD", "Root1234"),
     key_path=None,  # Auto-detect: tries id_ed25519 then id_rsa
 )
 
