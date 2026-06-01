@@ -29,6 +29,7 @@ Scan nearby networks, analyse RF health, run site surveys, and export PDF report
 
 - **macOS** 12+ (Monterey or later) — tested on macOS 14 Sonoma
 - Python 3.12 (recommended; CoreWLAN works reliably on 3.12)
+- **WLANPi (optional):** requires **two Wi-Fi adapters** — the built-in adapter runs in monitor mode and cannot scan; a USB Wi-Fi adapter (`wlan1`) is required for active scanning
 
 ```
 pip install flask paramiko pyobjc-framework-CoreWLAN
@@ -79,6 +80,11 @@ If missing: launch the `.app` once — the permission request registers the app 
 ---
 
 ## WLANPi Integration
+
+> **Two Wi-Fi adapters required.**  
+> The WLANPi's built-in adapter (`wlan0`) runs in monitor mode and cannot perform active scans.  
+> You must plug in a **USB Wi-Fi adapter** — it will appear as `wlan1` and RF·DIAG will use it automatically.  
+> Without a second adapter, the WLANPi will be detected via SSH but no networks will be returned.
 
 Connect a [WLANPi](https://www.wlanpi.com) via USB (RNDIS).  
 RF·DIAG will SSH into it and run `iw dev scan` to obtain:
